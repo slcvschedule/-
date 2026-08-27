@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>시험 일정 관리표</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #F2F4F3;
+    --paper: #FFFFFF;
+    --ink: #1B2430;
+    --ink-soft: #5B6472;
+    --line: #DCE1E2;
+    --line-strong: #B9C2C4;
+    --accent: #2F6F5C;        /* confirmed / brand */
+    --accent-soft: #E4EEEA;
+    --pending: #C07A2E;       /* pending / warning */
+    --pending-soft: #FBEEDF;
+    --danger: #B5453A;
+    --v: #35618F;
+    --rv: #6C5099;
+    --m: #C07A2E;
+    --etc: #656E78;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; background:var(--bg); color:var(--ink);
+    font-family:'IBM Plex Sans KR', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:28px 20px 80px; }
+
+  /* ---------- Header ---------- */
+  header.top{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:20px; gap:16px; flex-wrap:wrap;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.14em;
+    color:var(--ink-soft); text-transform:uppercase; margin:0 0 6px;
+  }
+  h1{ font-size:26px; margin:0; font-weight:700; letter-spacing:-.01em; }
+  .top-meta{ display:flex; gap:10px; align-items:center; font-size:13px; color:var(--ink-soft); }
+  .top-meta select{
+    font-family:'IBM Plex Mono', monospace; font-size:13px; padding:6px 8px;
+    border:1px solid var(--line-strong); border-radius:4px; background:var(--paper); color:var(--ink);
+  }
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px;
+  }
+  button{
+    font-family:'IBM Plex Sans KR', sans-serif; font-size:13px; font-weight:500;
+    padding:8px 14px; border-radius:5px; border:1px solid var(--line-strong);
+    background:var(--paper); color:var(--ink); cursor:pointer; transition:.12s;
+  }
+  button:hover{ border-color:var(--ink); }
+  button.primary{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  button.primary:hover{ background:#2a3543; }
+  button.ghost{ border-color:transparent; color:var(--ink-soft); }
+  button.ghost:hover{ color:var(--ink); border-color:var(--line-strong); }
+  button.small{ padding:4px 9px; font-size:12px; }
+  button.danger-ghost{ color:var(--danger); border-color:transparent; }
+  button.danger-ghost:hover{ background:#FBEAE8; border-color:#F0C9C4; }
+
+  /* ---------- Summary strip ---------- */
+  .summary{
+    display:flex; gap:0; margin-bottom:22px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper);
+  }
+  .summary .cell{ flex:1; padding:14px 18px; border-right:1px solid var(--line); }
+  .summary .cell:last-child{ border-right:none; }
+  .summary .num{ font-family:'IBM Plex Mono', monospace; font-size:22px; font-weight:600; line-height:1; }
+  .summary .label{ font-size:11.5px; color:var(--ink-soft); margin-top:6px; letter-spacing:.02em; }
+  .summary .cell.confirmed .num{ color:var(--accent); }
+  .summary .cell.pending .num{ color:var(--pending); }
+
+  /* ---------- Panels ---------- */
+  .panel{
+    background:var(--paper); border:1px solid var(--line); border-radius:10px;
+    padding:20px; margin-bottom:24px;
+  }
+  .panel-head{
+    display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;
+  }
+  .panel-head h2{ font-size:15px; margin:0; font-weight:600; }
+  .panel-head .sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+
+  /* ---------- Table ---------- */
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  thead th{
+    text-align:left; font-size:11px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--ink-soft); font-weight:600; padding:8px 8px; border-bottom:1px solid var(--line-strong);
+    font-family:'IBM Plex Mono', monospace;
+  }
+  tbody td{ padding:8px 8px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tbody tr:hover{ background:#FAFBFA; }
+  input[type=text], input[type=date], select.field{
+    width:100%; padding:6px 8px; border:1px solid var(--line); border-radius:4px;
+    font-family:'IBM Plex Sans KR', sans-serif; font-size:13px; background:var(--paper); color:var(--ink);
+  }
+  input[type=date]{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; }
+  input[type=text]:focus, input[type=date]:focus, select.field:focus{
+    outline:none; border-color:var(--ink); box-shadow:0 0 0 2px rgba(0,0,0,.05);
+  }
+  td.col-company{ min-width:130px; }
+  td.col-test{ min-width:150px; }
+  td.col-region{ min-width:100px; }
+  td.col-date{ min-width:130px; }
+  .test-select-row{ display:flex; gap:6px; }
+  .badge{
+    display:inline-flex; align-items:center; gap:5px; font-family:'IBM Plex Mono', monospace;
+    font-size:11px; font-weight:600; padding:3px 7px; border-radius:4px; white-space:nowrap;
+  }
+  .confirm-check{ display:flex; align-items:center; gap:6px; justify-content:center; }
+  .confirm-check input{ width:16px; height:16px; accent-color:var(--accent); cursor:pointer; }
+  .memo-btn{
+    width:30px; height:30px; border-radius:6px; border:1px solid var(--line); background:var(--paper);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; position:relative; font-size:14px;
+  }
+  .memo-btn.has-memo{ border-color:var(--accent); }
+  .memo-btn.has-memo::after{
+    content:''; position:absolute; top:-3px; right:-3px; width:8px; height:8px; border-radius:50%;
+    background:var(--accent); border:2px solid var(--paper);
+  }
+  .icon-btn{
+    width:30px; height:30px; border-radius:6px; border:1px solid transparent; background:transparent;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink-soft); font-size:14px;
+  }
+  .icon-btn:hover{ background:#FBEAE8; color:var(--danger); }
+  .empty-row td{ text-align:center; color:var(--ink-soft); padding:26px 0; font-size:13px; }
+  .last-year-hint{ font-size:11px; color:var(--ink-soft); margin-top:3px; }
+  .row-actions{ display:flex; gap:4px; }
+
+  /* ---------- Calendar ---------- */
+  .cal-nav{ display:flex; align-items:center; gap:12px; }
+  .cal-nav button{ width:32px; height:32px; padding:0; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .cal-title{ font-family:'IBM Plex Mono', monospace; font-size:16px; font-weight:600; min-width:120px; text-align:center; }
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--ink-soft); align-items:center; }
+  .legend .swatch{ display:inline-flex; align-items:center; gap:5px; }
+  .legend .dot{ width:9px; height:9px; border-radius:2px; display:inline-block; }
+  .legend .dot.pending-dot{ background:transparent; border:1.5px dashed var(--ink-soft); }
+
+  .cal-grid{
+    display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:var(--line);
+    border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-top:14px;
+  }
+  .cal-dow{
+    background:#F7F8F7; text-align:center; font-family:'IBM Plex Mono', monospace; font-size:11px;
+    padding:8px 0; color:var(--ink-soft); font-weight:600; letter-spacing:.05em;
+  }
+  .cal-dow.weekend{ color:var(--danger); }
+  .cal-cell{
+    background:var(--paper); min-height:104px; padding:6px; position:relative;
+    display:flex; flex-direction:column; gap:4px; cursor:pointer; transition:background .1s;
+  }
+  .cal-cell:hover{ background:#F6F8F7; }
+  .cal-cell.outside{ background:#FAFAF8; cursor:default; }
+  .cal-cell.outside:hover{ background:#FAFAF8; }
+  .cal-cell.today{ background:#FDF8EF; }
+  .cal-cell.today:hover{ background:#FBF3E1; }
+  .cal-cell.dragover{ outline:2px dashed var(--ink); outline-offset:-2px; }
+  .cal-cell.holiday{ background:#FDF4F3; }
+  .cal-cell.holiday:hover{ background:#FBE9E7; }
+  .cal-date-row{ display:flex; align-items:baseline; justify-content:space-between; gap:4px; }
+  .cal-date-num{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-soft);
+  }
+  .cal-cell.outside .cal-date-num{ color:#C7CCCB; }
+  .cal-date-num.holiday-num, .cal-dow.holiday-dow{ color:var(--danger); font-weight:600; }
+  .holiday-name{
+    font-family:'IBM Plex Sans KR', sans-serif; font-size:9.5px; font-weight:600; color:var(--danger);
+    line-height:1.2; word-break:keep-all;
+  }
+  .add-hint{
+    font-size:10px; color:var(--ink-soft); opacity:0; transition:opacity .12s; margin-top:auto;
+  }
+  .cal-cell:hover .add-hint{ opacity:1; }
+  .chip{
+    font-size:11px; font-family:'IBM Plex Sans KR', sans-serif; font-weight:500; padding:4px 6px;
+    border-radius:4px; cursor:grab; line-height:1.25; word-break:keep-all;
+  }
+  .chip:active{ cursor:grabbing; }
+  .chip .chip-test{ font-family:'IBM Plex Mono', monospace; font-size:9.5px; opacity:.85; display:block; }
+  .chip.confirmed{ color:#fff; }
+  .chip.pending{ background:transparent; border:1.5px dashed currentColor; }
+
+  /* ---------- Memo Modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(20,24,28,.45); display:none;
+    align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal{
+    background:var(--paper); border-radius:10px; width:100%; max-width:420px; padding:22px;
+    border:1px solid var(--line-strong);
+  }
+  #entryOverlay .modal, #holidayOverlay .modal{ max-width:480px; }
+  .modal h3{ margin:0 0 4px; font-size:15px; }
+  .modal .modal-sub{ font-size:12px; color:var(--ink-soft); margin-bottom:14px; }
+  .modal textarea{
+    width:100%; min-height:140px; padding:10px; border:1px solid var(--line); border-radius:6px;
+    font-family:'IBM Plex Sans KR', sans-serif; font-size:13.5px; resize:vertical; color:var(--ink);
+  }
+  .modal textarea:focus{ outline:none; border-color:var(--ink); }
+  .modal-footer{ display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
+
+  .holiday-banner{
+    background:var(--pending-soft); border:1px solid #F0C79A; color:#8A4A16; border-radius:6px;
+    padding:9px 11px; font-size:12.5px; margin-bottom:12px; font-weight:500;
+  }
+  .entry-form{ display:flex; flex-direction:column; gap:12px; }
+  .entry-form label{ display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--ink-soft); font-weight:500; }
+  .entry-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .entry-row label{ min-width:100px; }
+  .entry-row label{ flex:1; }
+  .entry-confirm{ flex-direction:row !important; align-items:center; gap:7px !important; font-size:13px !important; color:var(--ink) !important; }
+  .entry-confirm input{ width:16px; height:16px; accent-color:var(--accent); cursor:pointer; }
+
+  .holiday-list{ max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:6px; }
+  .holiday-list .h-row{
+    display:flex; align-items:center; justify-content:space-between; padding:7px 10px;
+    border-bottom:1px solid var(--line); font-size:12.5px;
+  }
+  .holiday-list .h-row:last-child{ border-bottom:none; }
+  .holiday-list .h-date{ font-family:'IBM Plex Mono', monospace; color:var(--danger); font-weight:600; min-width:90px; }
+  .holiday-list .h-name{ flex:1; padding:0 8px; color:var(--ink); }
+  .holiday-list .h-del{ background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:13px; padding:2px 6px; }
+  .holiday-list .h-del:hover{ color:var(--danger); }
+  .holiday-empty{ padding:16px; text-align:center; color:var(--ink-soft); font-size:12.5px; }
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:6px; font-size:13px;
+    opacity:0; pointer-events:none; transition:.25s; z-index:60;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .note{
+    font-size:12px; color:var(--ink-soft); background:#F7F8F7; border:1px solid var(--line);
+    border-radius:6px; padding:10px 12px; margin-bottom:18px; line-height:1.6;
+  }
+  .note b{ color:var(--ink); }
+  #syncStatus{ margin-left:8px; }
+  #syncStatus.ok{ color:var(--accent); }
+  #syncStatus.err{ color:var(--danger); }
+
+  /* ---------- Pages / sheet tabs ---------- */
+  body{ padding-bottom:56px; }
+  .page{ display:none; }
+  .page.active{ display:block; }
+  .page-title{ font-family:'IBM Plex Mono', monospace; font-size:12px; letter-spacing:.05em; color:var(--ink-soft); text-transform:uppercase; }
+  .panel-hero{ padding:24px 26px 26px; }
+  .panel-hero h2{ font-size:19px; }
+  .cal-grid-hero .cal-cell{ min-height:150px; padding:9px; }
+  .cal-grid-hero .cal-dow{ padding:11px 0; font-size:12px; }
+  .cal-grid-hero .cal-date-num{ font-size:13px; }
+  .cal-grid-hero .holiday-name{ font-size:10.5px; }
+  .cal-grid-hero .chip{ font-size:12px; padding:5px 7px; }
+  .cal-grid-hero .chip .chip-test{ font-size:10px; }
+
+  .sheet-tabs{
+    position:fixed; left:0; right:0; bottom:0; z-index:40;
+    display:flex; gap:3px; padding:9px 20px 0; background:#E7E9E7;
+    border-top:1px solid var(--line-strong);
+  }
+  .sheet-tab{
+    font-family:'IBM Plex Sans KR', sans-serif; font-size:13px; font-weight:500;
+    padding:9px 20px; border:1px solid var(--line-strong); border-bottom:none;
+    border-radius:7px 7px 0 0; background:#D8DBD8; color:var(--ink-soft); cursor:pointer;
+  }
+  .sheet-tab:hover{ background:#E0E3E0; color:var(--ink); }
+  .sheet-tab.active{
+    background:var(--paper); color:var(--ink); font-weight:600; position:relative; top:1px;
+    border-color:var(--line-strong);
+  }
+
+  @media (max-width:720px){
+    .cal-grid-hero .cal-cell{ min-height:88px; padding:5px; }
+    .sheet-tabs{ padding:8px 10px 0; }
+    .sheet-tab{ padding:8px 12px; font-size:12px; flex:1; text-align:center; }
+  }
+
+  @media (max-width:720px){
+    .cal-cell{ min-height:74px; }
+    thead{ display:none; }
+    table, tbody, tr, td{ display:block; width:100%; }
+    tbody tr{ border:1px solid var(--line); border-radius:8px; margin-bottom:10px; padding:8px; }
+    tbody td{ border-bottom:none; padding:6px 4px; }
+    td.col-date::before, td.col-company::before, td.col-test::before, td.col-region::before{
+      content:attr(data-label); display:block; font-size:10px; color:var(--ink-soft); margin-bottom:2px;
+      font-family:'IBM Plex Mono', monospace; text-transform:uppercase;
+    }
+  }
+
+  .permission-badge{font-size:11px;padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:#fff;}
+  .permission-badge.editor{border-color:var(--accent);color:var(--accent);background:#fffaf7;}
+  .permission-badge.viewer{color:#666;background:#f7f7f7;}
+  .view-only input:disabled,.view-only select:disabled,.view-only textarea:disabled{opacity:1;color:inherit;background:#fafafa;cursor:default;}
+  #btnSaveNow{display:none;} #btnSaveNow.show{display:inline-block;}
+
+  /* ---------- Supabase login ---------- */
+  .auth-overlay{position:fixed;inset:0;background:rgba(242,244,243,.96);z-index:9999;display:none;align-items:center;justify-content:center;padding:20px;}
+  .auth-card{width:min(420px,100%);background:#fff;border:1px solid var(--line);border-radius:12px;padding:28px;box-shadow:0 12px 40px rgba(0,0,0,.08)}
+  .auth-card h2{margin:0 0 8px;font-size:20px}.auth-sub{font-size:12px;color:var(--ink-soft);line-height:1.6;margin-bottom:18px}
+  .auth-card label{display:block;font-size:12px;font-weight:600;margin:12px 0 6px}.auth-card input{width:100%;padding:10px;border:1px solid var(--line-strong);border-radius:5px;font:inherit}
+  .auth-actions{display:flex;gap:8px;margin-top:18px}.auth-actions button{flex:1}.auth-error{min-height:18px;color:var(--danger);font-size:12px;margin-top:10px}
+  .logout-btn{font-size:11px;padding:5px 8px}
+
+</style>
+</head>
+<body>
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <div class="eyebrow">SUPABASE AUTH · 시험 일정 관리</div>
+    <h2>관리자 로그인</h2>
+    <div class="auth-sub">일정 조회는 로그인 없이 바로 사용할 수 있습니다.<br>일정 추가·수정·삭제가 필요할 때만 관리자 계정으로 로그인해주세요.</div>
+    <label>이메일<input id="authEmail" type="email" autocomplete="username" placeholder="name@company.com"></label>
+    <label>비밀번호<input id="authPassword" type="password" autocomplete="current-password" placeholder="비밀번호"></label>
+    <div class="auth-actions"><button class="primary" id="authLogin">로그인</button><button id="authCancel">취소</button></div>
+    <div class="auth-error" id="authError"></div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="eyebrow">Test Schedule Log · 시험 일정 관리</p>
+      <h1>월별 시험 일정 관리표</h1>
+    </div>
+    <div class="top-meta">
+      <span>기준연도(올해 일정)</span>
+      <select id="targetYearSelect"></select>
+    </div>
+  </header>
+
+  <div class="note">
+    이 사이트는 Supabase에 데이터를 저장합니다. 일정 조회는 로그인 없이 사용할 수 있으며, 일정 추가·수정·삭제가 필요할 때만 관리자 로그인을 해주세요.
+    관리자 계정은 로그인 상태가 브라우저에 유지되므로 매번 다시 로그인할 필요가 없습니다. 달력의 <b>편집 권한이 있는 사용자는 빈 날짜를 클릭해 일정을 등록하고, 기존 항목을 클릭해 수정하거나 드래그해 날짜를 이동할 수 있습니다. 보기 전용 사용자는 일정을 조회만 할 수 있습니다.
+    공휴일·연휴는 빨간색으로 표시되며, 2027년 이후 설날·추석 등 음력 공휴일은 정확한 날짜가 확정 전이라 비어 있을 수 있으니 <b>"공휴일 목록 수정"</b>에서 확인 후 보완해주세요.
+  </div>
+
+  <div class="toolbar">
+    <span class="page-title" id="pageTitle">월별 캘린더</span>
+    <span style="flex:1"></span>
+    <span id="userEmailStatus" class="page-title" style="font-size:11px;color:#777;"></span>
+    <span id="permissionStatus" class="permission-badge viewer">👁 권한 확인 중…</span>
+    <button id="btnAdminLogin" class="ghost logout-btn">🔐 관리자 로그인</button><button id="btnLogout" class="ghost logout-btn" style="display:none">로그아웃</button>
+    <span id="syncStatus" class="page-title">☁ 연결 확인 중…</span>
+    <button id="btnSaveNow" class="primary">💾 저장</button><button id="btnRefresh">새로고침</button>
+  </div>
+
+  <div class="summary" id="summary"></div>
+
+  <!-- PAGE 1: Calendar (main) -->
+  <div class="page active" id="page-calendar">
+    <section class="panel panel-hero">
+      <div class="panel-head">
+        <div>
+          <h2>월별 캘린더</h2>
+          <div class="sub">빈 날짜를 클릭해 일정을 등록하고, 항목을 드래그해서 날짜를 조정하세요. 실선 배지 = 확정 / 점선 배지 = 미확정</div>
+        </div>
+        <div class="cal-nav">
+          <button id="calPrev">‹</button>
+          <div class="cal-title mono" id="calTitle">-</div>
+          <button id="calNext">›</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span class="swatch"><span class="dot" style="background:var(--v)"></span>V</span>
+        <span class="swatch"><span class="dot" style="background:var(--rv)"></span>RV</span>
+        <span class="swatch"><span class="dot" style="background:var(--m)"></span>M</span>
+        <span class="swatch"><span class="dot" style="background:var(--etc)"></span>기타</span>
+        <span class="swatch"><span class="dot pending-dot"></span>미확정(점선)</span>
+        <span class="swatch">📤 견적서 발송됨</span>
+        <span class="swatch">📥 견적서 회신됨</span>
+        <span class="swatch"><span class="dot" style="background:var(--danger)"></span>공휴일·연휴</span>
+        <span style="flex:1"></span>
+        <button class="small ghost" id="btnHolidayEdit">공휴일 목록 수정</button>
+      </div>
+      <div class="cal-grid cal-grid-hero" id="calGrid"></div>
+    </section>
+  </div>
+
+  <!-- PAGE 2: Company / test list -->
+  <div class="page" id="page-list">
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>업체별 시험 항목</h2>
+          <div class="sub">업체명 · 시험항목(V / RV / M / 기타) · 지역 · 작년 시험일 · 올해 예정일 · 확정여부 · 견적서 발송여부 · 견적서 회신여부 · 메모</div>
+        </div>
+        <div style="display:flex; gap:8px">
+          <button class="primary" id="btnAdd">+ 업체 추가</button>
+          <button id="btnAutoAll">작년 기준 일괄 설정</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table id="scheduleTable">
+          <thead>
+            <tr>
+              <th style="width:14%">업체명</th>
+              <th style="width:13%">시험항목</th>
+              <th style="width:9%">지역</th>
+              <th style="width:12%">작년 시험일</th>
+              <th style="width:12%">올해 예정일</th>
+              <th style="width:7%; text-align:center">확정</th>
+              <th style="width:8%; text-align:center">견적발송</th>
+              <th style="width:8%; text-align:center">견적회신</th>
+              <th style="width:6%; text-align:center">메모</th>
+              <th style="width:6%; text-align:center"></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+</div>
+
+<!-- Sheet tabs (like a spreadsheet's sheet selector) -->
+<div class="sheet-tabs">
+  <button class="sheet-tab active" data-page="page-calendar" data-title="월별 캘린더">📅 월별 캘린더</button>
+  <button class="sheet-tab" data-page="page-list" data-title="업체별 시험 항목">📋 업체별 시험 항목</button>
+</div>
+
+
+<!-- Memo Modal -->
+<div class="modal-overlay" id="memoOverlay">
+  <div class="modal">
+    <h3 id="memoTitle">메모</h3>
+    <div class="modal-sub" id="memoSub"></div>
+    <textarea id="memoText" placeholder="업체 관련 특이사항, 연락 이력, 요청 사항 등을 적어두세요."></textarea>
+    <div class="modal-footer">
+      <button class="ghost" id="memoCancel">취소</button>
+      <button class="primary" id="memoSave">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Entry (Add/Edit) Modal -->
+<div class="modal-overlay" id="entryOverlay">
+  <div class="modal">
+    <h3 id="entryTitle">일정 추가</h3>
+    <div class="modal-sub" id="entrySub"></div>
+    <div id="entryHolidayBanner" class="holiday-banner" style="display:none"></div>
+    <div class="entry-form">
+      <label>업체명
+        <input type="text" id="entryName" placeholder="업체명">
+      </label>
+      <div class="entry-row">
+        <label>시험항목
+          <select id="entryTestType" class="field">
+            <option value="V">V</option>
+            <option value="RV">RV</option>
+            <option value="M">M</option>
+            <option value="기타">기타</option>
+          </select>
+        </label>
+        <label id="entryTestCustomWrap" style="display:none">직접 입력
+          <input type="text" id="entryTestCustom" placeholder="시험항목 입력">
+        </label>
+        <label>지역
+          <input type="text" id="entryRegion" placeholder="지역">
+        </label>
+      </div>
+      <label>메모
+        <textarea id="entryMemo" style="min-height:70px" placeholder="특이사항, 연락 이력 등"></textarea>
+      </label>
+      <label class="entry-confirm">
+        <input type="checkbox" id="entryConfirmed"> 확정된 일정입니다
+      </label>
+      <label class="entry-confirm">
+        <input type="checkbox" id="entryQuoteSent"> 견적서가 발송되었습니다
+      </label>
+      <label class="entry-confirm" id="entryQuoteRepliedWrap">
+        <input type="checkbox" id="entryQuoteReplied"> 견적서 회신을 받았습니다
+      </label>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="danger-ghost" id="entryDelete" style="display:none">삭제</button>
+      <div style="display:flex; gap:8px">
+        <button class="ghost" id="entryCancel">취소</button>
+        <button class="primary" id="entrySave">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Holiday Manager Modal -->
+<div class="modal-overlay" id="holidayOverlay">
+  <div class="modal">
+    <h3>공휴일 목록 관리</h3>
+    <div class="modal-sub">자동으로 채워진 공휴일·연휴 목록입니다. 실제 지정일과 다르면 수정하거나, 대체공휴일/임시공휴일을 직접 추가하세요.</div>
+    <div id="holidayList" class="holiday-list"></div>
+    <div class="entry-row" style="margin-top:10px">
+      <input type="date" id="newHolidayDate" style="flex:1">
+      <input type="text" id="newHolidayName" placeholder="공휴일명 (예: 임시공휴일)" style="flex:1">
+      <button class="small primary" id="newHolidayAdd">추가</button>
+    </div>
+    <div class="modal-footer">
+      <button class="primary" id="holidayClose">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const TEST_COLORS = { V:'var(--v)', RV:'var(--rv)', M:'var(--m)', '기타':'var(--etc)' };
+
+  // ---------- Korean public holiday seed data ----------
+  // 고정일(양력) 공휴일은 매년 동일하며, 설날/추석/부처님오신날은 음력 기준이라 연도별로 다릅니다.
+  // 대체공휴일 및 연도별 정확한 날짜는 정부 발표와 다를 수 있으니, 아래 "공휴일 목록 수정"에서 직접 보정할 수 있습니다.
+  const HOLIDAYS_SEED = {
+    '2025-01-01':'신정',
+    '2025-01-28':'설날 연휴','2025-01-29':'설날','2025-01-30':'설날 연휴',
+    '2025-03-01':'삼일절','2025-03-03':'대체공휴일(삼일절)',
+    '2025-05-05':'어린이날·부처님오신날','2025-05-06':'대체공휴일',
+    '2025-06-06':'현충일',
+    '2025-08-15':'광복절',
+    '2025-10-03':'개천절',
+    '2025-10-05':'추석 연휴','2025-10-06':'추석','2025-10-07':'추석 연휴','2025-10-08':'대체공휴일',
+    '2025-10-09':'한글날',
+    '2025-12-25':'크리스마스',
+
+    '2026-01-01':'신정',
+    '2026-02-16':'설날 연휴','2026-02-17':'설날','2026-02-18':'설날 연휴',
+    '2026-03-01':'삼일절','2026-03-02':'대체공휴일(삼일절)',
+    '2026-05-05':'어린이날',
+    '2026-05-24':'부처님오신날','2026-05-25':'대체공휴일',
+    '2026-06-06':'현충일',
+    '2026-08-15':'광복절','2026-08-17':'대체공휴일(광복절)',
+    '2026-09-24':'추석 연휴','2026-09-25':'추석','2026-09-26':'추석 연휴',
+    '2026-10-03':'개천절',
+    '2026-10-09':'한글날',
+    '2026-12-25':'크리스마스',
+
+    '2027-01-01':'신정',
+    '2027-03-01':'삼일절',
+    '2027-05-05':'어린이날',
+    '2027-06-06':'현충일',
+    '2027-08-15':'광복절',
+    '2027-10-03':'개천절',
+    '2027-10-09':'한글날',
+    '2027-12-25':'크리스마스',
+
+    '2028-01-01':'신정',
+    '2028-03-01':'삼일절',
+    '2028-05-05':'어린이날',
+    '2028-06-06':'현충일',
+    '2028-08-15':'광복절',
+    '2028-10-03':'개천절',
+    '2028-10-09':'한글날',
+    '2028-12-25':'크리스마스',
+  };
+
+  // ---------- Seed sample data (editable / deletable) ----------
+  let state = {
+    targetYear: new Date().getFullYear(),
+    holidays: Object.assign({}, HOLIDAYS_SEED),
+    companies: [
+      { id: uid(), name:'대한계측', testType:'V', testTypeCustom:'', region:'경기 안산', lastYearDate: (new Date().getFullYear()-1)+'-03-14', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, memo:'매년 3월 둘째 주 선호. 담당자: 김OO 과장' },
+      { id: uid(), name:'한빛시험소', testType:'RV', testTypeCustom:'', region:'충남 아산', lastYearDate: (new Date().getFullYear()-1)+'-05-22', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, memo:'' },
+      { id: uid(), name:'삼성정밀', testType:'M', testTypeCustom:'', region:'부산', lastYearDate: (new Date().getFullYear()-1)+'-09-05', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, memo:'현장 접근 어려움 - 전날 사전 연락 필수' },
+    ]
+  };
+
+  let calView = { year: state.targetYear, month: new Date().getMonth() }; // month 0-11
+  let memoEditingId = null;
+  let currentUserEmail = '';
+  let canEdit = false;
+  let saving = false;
+  let saveTimer = null;
+
+  // ---------- Supabase sync ----------
+  const SUPABASE_URL = 'sb_secret_a1cgHZlzv_4Mc_X7viNqCQ_OUCAkfrK';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_secret_a1cgHZlzv_4Mc_X7viNqCQ_OUCAkfrK';
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  const syncStatus = document.getElementById('syncStatus');
+  const authOverlay = document.getElementById('authOverlay');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
+  const authError = document.getElementById('authError');
+  const authLogin = document.getElementById('authLogin');
+  const authCancel = document.getElementById('authCancel');
+  const btnAdminLogin = document.getElementById('btnAdminLogin');
+  const btnLogout = document.getElementById('btnLogout');
+
+  function setSyncStatus(text, cls=''){
+    syncStatus.textContent = text;
+    syncStatus.className = 'page-title ' + cls;
+  }
+  function setPermissionStatus(){
+    const el = document.getElementById('permissionStatus');
+    const emailEl = document.getElementById('userEmailStatus');
+    if(el){
+      el.className = 'permission-badge ' + (canEdit ? 'editor' : 'viewer');
+      el.textContent = canEdit ? '✎ 편집 가능' : '👁 누구나 조회 가능';
+    }
+    if(emailEl){
+      emailEl.textContent = currentUserEmail ? `👤 ${currentUserEmail}` : '🌐 공개 조회';
+    }
+    if(btnAdminLogin) btnAdminLogin.style.display = currentUserEmail ? 'none' : '';
+    if(btnLogout) btnLogout.style.display = currentUserEmail ? '' : 'none';
+  }
+  async function loadUserInfo(){
+    const { data:{ user }, error } = await supabase.auth.getUser();
+    if(error || !user){
+      currentUserEmail=''; canEdit=false; setPermissionStatus(); applyPermissionUI(); return;
+    }
+    currentUserEmail = user.email || '';
+    const { data:profile, error:profileError } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+    if(profileError){ console.warn('프로필 조회 실패:', profileError); }
+    canEdit = !!(profile && profile.role === 'editor');
+    setPermissionStatus(); applyPermissionUI();
+  }
+  function applyPermissionUI(){
+    ['btnAdd','btnAutoAll','btnHolidayEdit','btnSaveNow'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.style.display=canEdit ? '' : 'none';
+    });
+    document.querySelectorAll('.editor-only').forEach(el=> el.style.display = canEdit ? '' : 'none');
+    renderAll();
+  }
+  function ensureEditor(){
+    if(canEdit) return true;
+    openLoginModal();
+    return false;
+  }
+  function openLoginModal(){
+    authError.textContent='';
+    authPassword.value='';
+    authOverlay.style.display='flex';
+    setTimeout(()=>authEmail.focus(),50);
+  }
+  function closeLoginModal(){ authOverlay.style.display='none'; }
+
+  async function loadFromSupabase(){
+    setSyncStatus('☁ 불러오는 중…');
+    try{
+      const [{data:settings,error:e1},{data:companies,error:e2},{data:holidays,error:e3}] = await Promise.all([
+        supabase.from('schedule_settings').select('target_year').eq('id',1).maybeSingle(),
+        supabase.from('schedules').select('*').order('planned_date',{ascending:true}).order('name',{ascending:true}),
+        supabase.from('holidays').select('*').order('date',{ascending:true})
+      ]);
+      if(e1||e2||e3) throw (e1||e2||e3);
+      state.targetYear = Number(settings?.target_year) || state.targetYear;
+      state.companies = (companies||[]).map(c=>({
+        id:String(c.id), name:String(c.name||''), testType:String(c.test_type||'V'),
+        testTypeCustom:String(c.test_type_custom||''), region:String(c.region||''),
+        lastYearDate:String(c.last_year_date||''), plannedDate:String(c.planned_date||''),
+        confirmed:!!c.confirmed, quoteSent:!!c.quote_sent, quoteReplied:!!c.quote_replied, memo:String(c.memo||'')
+      }));
+      state.holidays = {};
+      (holidays||[]).forEach(h=>{ state.holidays[String(h.date)] = String(h.name||'공휴일'); });
+      calView.year=state.targetYear; populateYearSelect(); renderAll();
+      setSyncStatus('● Supabase 연결됨', 'ok');
+    }catch(err){
+      console.error(err); setSyncStatus('⚠ 연결 실패','err');
+      showToast('Supabase 연결에 실패했습니다. URL/키와 RLS 정책을 확인해주세요.');
+    }
+  }
+  function saveToSheet(message='저장되었습니다'){
+    if(!canEdit) return;
+    clearTimeout(saveTimer); saveTimer=setTimeout(()=>performSave_(message),250);
+  }
+  async function performSave_(message='저장되었습니다'){
+    if(!canEdit) return;
+    saving=true; setSyncStatus('● 저장 중…');
+    try{
+      const companies = state.companies.map(c=>({
+        id:String(c.id), name:String(c.name||''), test_type:String(c.testType||'V'),
+        test_type_custom:String(c.testTypeCustom||''), region:String(c.region||''),
+        last_year_date:c.lastYearDate||null, planned_date:c.plannedDate||null,
+        confirmed:!!c.confirmed, quote_sent:!!c.quoteSent, quote_replied:!!c.quoteReplied, memo:String(c.memo||'')
+      }));
+      const {data:{user}}=await supabase.auth.getUser();
+      if(!user) throw new Error('관리자 로그인이 필요합니다.');
+      const {data:profile}=await supabase.from('profiles').select('role').eq('id',user.id).maybeSingle();
+      if(!profile || profile.role!=='editor') throw new Error('편집 권한이 없습니다.');
+
+      const {data:existing,error:exErr}=await supabase.from('schedules').select('id');
+      if(exErr) throw exErr;
+      const keep=new Set(companies.map(c=>c.id));
+      const removed=(existing||[]).map(x=>String(x.id)).filter(id=>!keep.has(id));
+      if(removed.length){ const {error}=await supabase.from('schedules').delete().in('id',removed); if(error) throw error; }
+      if(companies.length){ const {error}=await supabase.from('schedules').upsert(companies,{onConflict:'id'}); if(error) throw error; }
+
+      const holidayRows=Object.entries(state.holidays).map(([date,name])=>({date,name:String(name||'공휴일')}));
+      const {data:oldH,error:ohErr}=await supabase.from('holidays').select('date');
+      if(ohErr) throw ohErr;
+      const keepH=new Set(holidayRows.map(h=>h.date));
+      const removedH=(oldH||[]).map(x=>x.date).filter(d=>!keepH.has(d));
+      if(removedH.length){ const {error}=await supabase.from('holidays').delete().in('date',removedH); if(error) throw error; }
+      if(holidayRows.length){ const {error}=await supabase.from('holidays').upsert(holidayRows,{onConflict:'date'}); if(error) throw error; }
+      const {error:se}=await supabase.from('schedule_settings').upsert({id:1,target_year:Number(state.targetYear)||new Date().getFullYear()},{onConflict:'id'});
+      if(se) throw se;
+      const t=new Date(); setSyncStatus(`● 저장 완료 · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`,'ok');
+      if(message) showToast(message);
+    }catch(err){
+      console.error(err); setSyncStatus('⚠ 저장 실패','err'); showToast('저장 실패: '+(err.message||err));
+    }finally{ saving=false; }
+  }
+  function saveNow(){
+    if(!ensureEditor()) return; clearTimeout(saveTimer);
+    if(saving){ showToast('이전 저장이 끝날 때까지 잠시 기다려주세요.'); return; }
+    performSave_('저장 완료');
+  }
+
+  authLogin.addEventListener('click', async ()=>{
+    authError.textContent=''; authLogin.disabled=true; authLogin.textContent='로그인 중…';
+    const {error}=await supabase.auth.signInWithPassword({email:authEmail.value.trim(),password:authPassword.value});
+    authLogin.disabled=false; authLogin.textContent='로그인';
+    if(error){ authError.textContent='로그인에 실패했습니다. 이메일/비밀번호를 확인해주세요.'; return; }
+    authPassword.value=''; closeLoginModal();
+    await loadUserInfo(); await loadFromSupabase();
+  });
+  authPassword.addEventListener('keydown',e=>{if(e.key==='Enter') authLogin.click();});
+  authCancel.addEventListener('click',closeLoginModal);
+  authOverlay.addEventListener('click',e=>{if(e.target===authOverlay) closeLoginModal();});
+  btnAdminLogin.addEventListener('click',openLoginModal);
+  btnLogout.addEventListener('click',async()=>{ await supabase.auth.signOut(); currentUserEmail=''; canEdit=false; setPermissionStatus(); applyPermissionUI(); setSyncStatus('● 공개 조회 모드','ok'); });
+
+  // 기존 관리자 세션이 있으면 자동으로 편집 권한을 복원하고, 없으면 익명 조회로 시작합니다.
+  (async function initSupabase(){
+    setPermissionStatus();
+    await loadFromSupabase();
+    await loadUserInfo();
+  })();
+
+  // ---------- Year select ----------
+  const targetYearSelect = document.getElementById('targetYearSelect');
+  function populateYearSelect(){
+    const now = new Date().getFullYear();
+    targetYearSelect.innerHTML = '';
+    for(let y = now-1; y <= now+2; y++){
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = y + '년';
+      if(y === state.targetYear) opt.selected = true;
+      targetYearSelect.appendChild(opt);
+    }
+  }
+  targetYearSelect.addEventListener('change', e=>{
+    state.targetYear = parseInt(e.target.value, 10);
+    calView.year = state.targetYear;
+    renderAll();
+    saveToSheet();
+  });
+
+  // ---------- Rendering: Table ----------
+  const tableBody = document.getElementById('tableBody');
+
+  function testTypeBadge(item){
+    const color = TEST_COLORS[item.testType] || 'var(--etc)';
+    const label = item.testType === '기타' ? (item.testTypeCustom || '기타') : item.testType;
+    return `<span class="badge" style="background:${item.confirmed? color : 'transparent'}; color:${item.confirmed? '#fff' : color}; border:${item.confirmed? 'none' : '1.5px dashed '+color}">${escapeHtml(label)}</span>`;
+  }
+
+  function renderTable(){
+    if(state.companies.length === 0){
+      tableBody.innerHTML = `<tr class="empty-row"><td colspan="10">등록된 업체가 없습니다. "+ 업체 추가"로 시작하세요.</td></tr>`;
+      return;
+    }
+    tableBody.innerHTML = state.companies.map(item => {
+      const isEtc = item.testType === '기타';
+      return `
+      <tr data-id="${item.id}">
+        <td class="col-company" data-label="업체명">
+          <input type="text" value="${escapeAttr(item.name)}" data-field="name" placeholder="업체명" ${canEdit?'':'disabled'}>
+        </td>
+        <td class="col-test" data-label="시험항목">
+          <div class="test-select-row">
+            <select class="field" data-field="testType" style="max-width:${isEtc? '72px':'100%'}" ${canEdit?'':'disabled'}>
+              ${['V','RV','M','기타'].map(t=>`<option value="${t}" ${item.testType===t?'selected':''}>${t}</option>`).join('')}
+            </select>
+            ${isEtc ? `<input type="text" data-field="testTypeCustom" value="${escapeAttr(item.testTypeCustom)}" placeholder="직접 입력" ${canEdit?'':'disabled'}>` : ''}
+          </div>
+        </td>
+        <td class="col-region" data-label="지역">
+          <input type="text" value="${escapeAttr(item.region)}" data-field="region" placeholder="지역" ${canEdit?'':'disabled'}>
+        </td>
+        <td data-label="작년 시험일">
+          <input type="date" value="${item.lastYearDate||''}" data-field="lastYearDate" ${canEdit?'':'disabled'}>
+          <div class="last-year-hint">${canEdit ? '<button class="small ghost" data-action="autoOne" style="padding:2px 6px">이 날짜로 올해 설정 →</button>' : ''}</div>
+        </td>
+        <td class="col-date" data-label="올해 예정일">
+          <input type="date" value="${item.plannedDate||''}" data-field="plannedDate" ${canEdit?'':'disabled'}>
+        </td>
+        <td style="text-align:center" data-label="확정">
+          <div class="confirm-check">
+            <input type="checkbox" ${item.confirmed?'checked':''} data-field="confirmed" ${canEdit?'':'disabled'}>
+          </div>
+        </td>
+        <td style="text-align:center" data-label="견적발송">
+          <div class="confirm-check">
+            <input type="checkbox" ${item.quoteSent?'checked':''} data-field="quoteSent" ${canEdit?'':'disabled'}>
+          </div>
+        </td>
+        <td style="text-align:center" data-label="견적회신">
+          <div class="confirm-check">
+            <input type="checkbox" ${item.quoteReplied?'checked':''} ${item.quoteSent && canEdit?'':'disabled'} data-field="quoteReplied" title="${item.quoteSent? '' : '견적서 발송 후 체크할 수 있어요'}">
+          </div>
+        </td>
+        <td style="text-align:center" data-label="메모">
+          <button class="memo-btn ${item.memo && item.memo.trim() ? 'has-memo':''}" data-action="memo" title="메모 보기/편집">📝</button>
+        </td>
+        <td style="text-align:center">
+          <div class="row-actions">
+            ${canEdit ? '<button class="icon-btn" data-action="delete" title="삭제">🗑</button>' : ''}
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  tableBody.addEventListener('input', e=>{
+    if(!canEdit) return;
+    const tr = e.target.closest('tr[data-id]');
+    if(!tr) return;
+    const id = tr.dataset.id;
+    const field = e.target.dataset.field;
+    if(!field) return;
+    const item = state.companies.find(c=>c.id===id);
+    if(!item) return;
+    if(field === 'confirmed'){ item.confirmed = e.target.checked; renderAll(); saveToSheet(); return; }
+    if(field === 'quoteSent'){
+      item.quoteSent = e.target.checked;
+      if(!item.quoteSent) item.quoteReplied = false;
+      renderAll();
+      saveToSheet();
+      return;
+    }
+    if(field === 'quoteReplied'){ item.quoteReplied = e.target.checked; renderAll(); saveToSheet(); return; }
+    item[field] = e.target.value;
+    if(field === 'testType'){ renderAll(); saveToSheet(); return; }
+    renderSummary();
+    renderCalendar(); // date or region/name change may affect calendar text
+    saveToSheet();
+  });
+
+  tableBody.addEventListener('click', e=>{
+    const tr = e.target.closest('tr[data-id]');
+    const btn = e.target.closest('button');
+    if(!tr || !btn) return;
+    const id = tr.dataset.id;
+    const item = state.companies.find(c=>c.id===id);
+    const action = btn.dataset.action;
+    if(action === 'delete'){
+      if(!ensureEditor()) return;
+      if(confirm(`"${item.name || '이름 없음'}" 항목을 삭제할까요?`)){
+        state.companies = state.companies.filter(c=>c.id!==id);
+        renderAll();
+        saveToSheet('삭제되었습니다');
+      }
+    } else if(action === 'memo'){
+      openMemo(id);
+    } else if(action === 'autoOne'){
+      if(!ensureEditor()) return;
+      applyAutoDate(item);
+      renderAll();
+      showToast(`${item.name || '해당 업체'}의 예정일이 설정되었습니다`);
+    }
+  });
+
+  function applyAutoDate(item){
+    if(!item.lastYearDate) return;
+    const d = new Date(item.lastYearDate);
+    if(isNaN(d)) return;
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    item.plannedDate = `${state.targetYear}-${mm}-${dd}`;
+  }
+
+  // ---------- Toolbar actions ----------
+  document.getElementById('btnAdd').addEventListener('click', ()=>{
+    if(!ensureEditor()) return;
+    state.companies.push({ id:uid(), name:'', testType:'V', testTypeCustom:'', region:'', lastYearDate:'', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, memo:'' });
+    renderAll();
+    saveToSheet();
+    const rows = tableBody.querySelectorAll('tr[data-id] input[data-field="name"]');
+    if(rows.length) rows[rows.length-1].focus();
+  });
+
+  document.getElementById('btnAutoAll').addEventListener('click', ()=>{
+    if(!ensureEditor()) return;
+    let count = 0;
+    state.companies.forEach(item=>{
+      if(item.lastYearDate && !item.plannedDate){
+        applyAutoDate(item);
+        count++;
+      }
+    });
+    renderAll();
+    saveToSheet();
+    showToast(count > 0 ? `${count}건의 예정일을 작년 기준으로 설정했습니다` : '설정할 항목이 없습니다 (예정일이 비어있고 작년 시험일이 입력된 항목만 적용)');
+  });
+
+  document.getElementById('btnRefresh').addEventListener('click', loadFromSupabase);
+  document.getElementById('btnSaveNow').addEventListener('click', saveNow);
+
+  // ---------- Summary ----------
+  function renderSummary(){
+    const total = state.companies.length;
+    const confirmed = state.companies.filter(c=>c.confirmed).length;
+    const pending = total - confirmed;
+    const noDate = state.companies.filter(c=>!c.plannedDate).length;
+    const awaitingReply = state.companies.filter(c=>c.quoteSent && !c.quoteReplied).length;
+    document.getElementById('summary').innerHTML = `
+      <div class="cell"><div class="num mono">${total}</div><div class="label">전체 업체</div></div>
+      <div class="cell confirmed"><div class="num mono">${confirmed}</div><div class="label">확정</div></div>
+      <div class="cell pending"><div class="num mono">${pending}</div><div class="label">미확정</div></div>
+      <div class="cell"><div class="num mono">${noDate}</div><div class="label">예정일 미입력</div></div>
+      <div class="cell pending"><div class="num mono">${awaitingReply}</div><div class="label">견적 회신 대기</div></div>
+    `;
+  }
+
+  // ---------- Memo modal ----------
+  const memoOverlay = document.getElementById('memoOverlay');
+  function openMemo(id){
+    const item = state.companies.find(c=>c.id===id);
+    memoEditingId = id;
+    document.getElementById('memoTitle').textContent = `메모 — ${item.name || '이름 없음'}`;
+    document.getElementById('memoSub').textContent = `${item.region || '지역 미입력'} · ${item.testType === '기타' ? (item.testTypeCustom||'기타') : item.testType}`;
+    document.getElementById('memoText').value = item.memo || '';
+    document.getElementById('memoText').readOnly = !canEdit;
+    document.getElementById('memoSave').style.display = canEdit ? '' : 'none';
+    memoOverlay.classList.add('open');
+    document.getElementById('memoText').focus();
+  }
+  document.getElementById('memoCancel').addEventListener('click', ()=> memoOverlay.classList.remove('open'));
+  memoOverlay.addEventListener('click', e=>{ if(e.target === memoOverlay) memoOverlay.classList.remove('open'); });
+  document.getElementById('memoSave').addEventListener('click', ()=>{
+    if(!ensureEditor()) return;
+    const item = state.companies.find(c=>c.id===memoEditingId);
+    if(item) item.memo = document.getElementById('memoText').value;
+    memoOverlay.classList.remove('open');
+    renderTable();
+    saveToSheet('메모가 저장되었습니다');
+  });
+
+  // ---------- Calendar ----------
+  const calGrid = document.getElementById('calGrid');
+  const calTitle = document.getElementById('calTitle');
+  const DOW = ['일','월','화','수','목','금','토'];
+
+  document.getElementById('calPrev').addEventListener('click', ()=>{
+    calView.month--; if(calView.month < 0){ calView.month = 11; calView.year--; }
+    renderCalendar();
+  });
+  document.getElementById('calNext').addEventListener('click', ()=>{
+    calView.month++; if(calView.month > 11){ calView.month = 0; calView.year++; }
+    renderCalendar();
+  });
+
+  function pad(n){ return String(n).padStart(2,'0'); }
+
+  function renderCalendar(){
+    calTitle.textContent = `${calView.year}년 ${calView.month+1}월`;
+    const firstOfMonth = new Date(calView.year, calView.month, 1);
+    // Sunday-first offset
+    let startOffset = firstOfMonth.getDay();
+    const daysInMonth = new Date(calView.year, calView.month+1, 0).getDate();
+    const daysInPrevMonth = new Date(calView.year, calView.month, 0).getDate();
+
+    const cellsMeta = [];
+    for(let i=0;i<startOffset;i++){
+      const dayNum = daysInPrevMonth - startOffset + 1 + i;
+      cellsMeta.push({ dayNum, outside:true });
+    }
+    for(let d=1; d<=daysInMonth; d++){
+      cellsMeta.push({ dayNum:d, outside:false, dateStr: `${calView.year}-${pad(calView.month+1)}-${pad(d)}` });
+    }
+    while(cellsMeta.length % 7 !== 0){
+      cellsMeta.push({ dayNum: cellsMeta.length - (startOffset+daysInMonth) + 1, outside:true });
+    }
+
+    const todayStr = (()=>{ const t=new Date(); return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`; })();
+
+    let html = DOW.map((d,i)=>`<div class="cal-dow ${(i===0||i===6)?'weekend':''}">${d}</div>`).join('');
+
+    html += cellsMeta.map(cell => {
+      if(cell.outside){
+        return `<div class="cal-cell outside"><div class="cal-date-num">${cell.dayNum}</div></div>`;
+      }
+      const isToday = cell.dateStr === todayStr;
+      const holidayName = state.holidays[cell.dateStr];
+      const isHoliday = !!holidayName;
+      const items = state.companies.filter(c => c.plannedDate === cell.dateStr);
+      const chips = items.map(item=>{
+        const color = TEST_COLORS[item.testType] || 'var(--etc)';
+        const label = item.testType === '기타' ? (item.testTypeCustom || '기타') : item.testType;
+        return `<div class="chip ${item.confirmed?'confirmed':'pending'}"
+                     ${canEdit ? 'draggable="true"' : 'draggable="false"'}
+                     data-chip-id="${item.id}"
+                     style="${item.confirmed ? 'background:'+color : 'color:'+color}"
+                     title="${escapeAttr(item.name)} · ${escapeAttr(item.region)}&#10;견적서: ${item.quoteSent ? (item.quoteReplied ? '발송됨 · 회신 받음' : '발송됨 · 회신 대기중') : '미발송'}&#10;메모: ${escapeAttr(item.memo||'없음')}">
+                  ${escapeHtml(item.name || '(이름 없음)')}<span class="chip-test">${item.quoteSent ? (item.quoteReplied ? '📥 ' : '📤 ') : ''}${escapeHtml(label)}</span>
+                </div>`;
+      }).join('');
+      return `<div class="cal-cell ${isToday?'today':''} ${isHoliday?'holiday':''}" data-date="${cell.dateStr}" ${isHoliday?`data-holiday="${escapeAttr(holidayName)}"`:''}>
+                <div class="cal-date-row">
+                  <span class="cal-date-num ${isHoliday?'holiday-num':''}">${cell.dayNum}</span>
+                </div>
+                ${isHoliday ? `<div class="holiday-name">${escapeHtml(holidayName)}</div>` : ''}
+                ${chips}
+                ${canEdit ? '<div class="add-hint">+ 클릭해서 추가</div>' : ''}
+              </div>`;
+    }).join('');
+
+    calGrid.innerHTML = html;
+    attachDragHandlers();
+    attachClickHandlers();
+  }
+
+  function attachDragHandlers(){
+    if(!canEdit) return;
+    calGrid.querySelectorAll('.chip').forEach(chip=>{
+      chip.addEventListener('dragstart', e=>{
+        e.dataTransfer.setData('text/plain', chip.dataset.chipId);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+    });
+    calGrid.querySelectorAll('.cal-cell[data-date]').forEach(cell=>{
+      cell.addEventListener('dragover', e=>{ e.preventDefault(); cell.classList.add('dragover'); });
+      cell.addEventListener('dragleave', ()=> cell.classList.remove('dragover'));
+      cell.addEventListener('drop', e=>{
+        e.preventDefault();
+        cell.classList.remove('dragover');
+        const id = e.dataTransfer.getData('text/plain');
+        const item = state.companies.find(c=>c.id===id);
+        if(item){
+          item.plannedDate = cell.dataset.date;
+          renderAll();
+          saveToSheet(`${item.name || '항목'}의 예정일이 ${cell.dataset.date}로 변경되었습니다`);
+        }
+      });
+    });
+  }
+
+  function attachClickHandlers(){
+    // Clicking a chip opens edit for that entry
+    calGrid.querySelectorAll('.chip').forEach(chip=>{
+      chip.addEventListener('click', e=>{
+        e.stopPropagation();
+        if(!canEdit){ openMemo(chip.dataset.chipId); return; }
+        openEntryModal({ mode:'edit', id: chip.dataset.chipId });
+      });
+    });
+    // Clicking empty cell area opens add-new-entry modal for that date
+    calGrid.querySelectorAll('.cal-cell[data-date]').forEach(cell=>{
+      cell.addEventListener('click', ()=>{
+        if(!canEdit) return;
+        openEntryModal({ mode:'add', dateStr: cell.dataset.date, holidayName: cell.dataset.holiday || null });
+      });
+    });
+  }
+
+  // ---------- Entry (add/edit) modal ----------
+  const entryOverlay = document.getElementById('entryOverlay');
+  const entryTestType = document.getElementById('entryTestType');
+  const entryTestCustomWrap = document.getElementById('entryTestCustomWrap');
+  let entryState = { mode:'add', id:null, dateStr:null };
+
+  function openEntryModal({ mode, id, dateStr, holidayName }){
+    entryState.mode = mode;
+    let item;
+    if(mode === 'edit'){
+      item = state.companies.find(c=>c.id===id);
+      entryState.id = id;
+      entryState.dateStr = item.plannedDate;
+    } else {
+      item = { name:'', testType:'V', testTypeCustom:'', region:'', memo:'', confirmed:false, quoteSent:false, quoteReplied:false };
+      entryState.id = null;
+      entryState.dateStr = dateStr;
+    }
+    const displayDate = entryState.dateStr || '(날짜 미지정)';
+    document.getElementById('entryTitle').textContent = mode === 'edit' ? '일정 수정' : '새 일정 추가';
+    document.getElementById('entrySub').textContent = displayDate;
+    document.getElementById('entryName').value = item.name || '';
+    entryTestType.value = item.testType || 'V';
+    document.getElementById('entryTestCustom').value = item.testTypeCustom || '';
+    entryTestCustomWrap.style.display = item.testType === '기타' ? 'flex' : 'none';
+    document.getElementById('entryRegion').value = item.region || '';
+    document.getElementById('entryMemo').value = item.memo || '';
+    document.getElementById('entryConfirmed').checked = !!item.confirmed;
+    document.getElementById('entryQuoteSent').checked = !!item.quoteSent;
+    const entryQuoteReplied = document.getElementById('entryQuoteReplied');
+    entryQuoteReplied.checked = !!item.quoteReplied;
+    entryQuoteReplied.disabled = !item.quoteSent;
+    document.getElementById('entryDelete').style.display = mode === 'edit' ? 'inline-flex' : 'none';
+
+    const holiday = holidayName || (entryState.dateStr ? state.holidays[entryState.dateStr] : null);
+    const isWeekend = (()=>{
+      if(!entryState.dateStr) return false;
+      const [y,m,d] = entryState.dateStr.split('-').map(Number);
+      const dow = new Date(y, m-1, d).getDay();
+      return dow === 0 || dow === 6;
+    })();
+    const banner = document.getElementById('entryHolidayBanner');
+    if(holiday){
+      banner.style.display = 'block';
+      banner.textContent = `⚠ 공휴일입니다 (${holiday}) — 연휴 기간에는 업체와 일정 조율이 어려울 수 있어요.`;
+    } else if(isWeekend){
+      banner.style.display = 'block';
+      banner.textContent = `⚠ 주말(휴일)입니다 — 업체와 일정 조율이 어려울 수 있어요.`;
+    } else {
+      banner.style.display = 'none';
+    }
+
+    entryOverlay.classList.add('open');
+    document.getElementById('entryName').focus();
+  }
+
+  entryTestType.addEventListener('change', ()=>{
+    entryTestCustomWrap.style.display = entryTestType.value === '기타' ? 'flex' : 'none';
+  });
+
+  document.getElementById('entryQuoteSent').addEventListener('change', (e)=>{
+    const entryQuoteReplied = document.getElementById('entryQuoteReplied');
+    entryQuoteReplied.disabled = !e.target.checked;
+    if(!e.target.checked) entryQuoteReplied.checked = false;
+  });
+
+  document.getElementById('entryCancel').addEventListener('click', ()=> entryOverlay.classList.remove('open'));
+  entryOverlay.addEventListener('click', e=>{ if(e.target === entryOverlay) entryOverlay.classList.remove('open'); });
+
+  document.getElementById('entrySave').addEventListener('click', ()=>{
+    if(!ensureEditor()) return;
+    const name = document.getElementById('entryName').value.trim();
+    if(!name){ alert('업체명을 입력해주세요.'); document.getElementById('entryName').focus(); return; }
+    const payload = {
+      name,
+      testType: entryTestType.value,
+      testTypeCustom: document.getElementById('entryTestCustom').value.trim(),
+      region: document.getElementById('entryRegion').value.trim(),
+      memo: document.getElementById('entryMemo').value,
+      confirmed: document.getElementById('entryConfirmed').checked,
+      quoteSent: document.getElementById('entryQuoteSent').checked,
+      quoteReplied: document.getElementById('entryQuoteSent').checked && document.getElementById('entryQuoteReplied').checked,
+      plannedDate: entryState.dateStr || ''
+    };
+    if(entryState.mode === 'edit'){
+      const item = state.companies.find(c=>c.id===entryState.id);
+      Object.assign(item, payload);
+      showToast('일정이 수정되었습니다');
+    } else {
+      state.companies.push(Object.assign({ id:uid(), lastYearDate:'' }, payload));
+      showToast(`${name}의 일정이 ${payload.plannedDate}에 추가되었습니다`);
+    }
+    entryOverlay.classList.remove('open');
+    renderAll();
+  });
+
+  document.getElementById('entryDelete').addEventListener('click', ()=>{
+    if(!ensureEditor()) return;
+    const item = state.companies.find(c=>c.id===entryState.id);
+    if(item && confirm(`"${item.name || '이름 없음'}" 일정을 삭제할까요?`)){
+      state.companies = state.companies.filter(c=>c.id!==entryState.id);
+      entryOverlay.classList.remove('open');
+      renderAll();
+      saveToSheet('삭제되었습니다');
+    }
+  });
+
+  // ---------- Holiday manager modal ----------
+  const holidayOverlay = document.getElementById('holidayOverlay');
+  document.getElementById('btnHolidayEdit').addEventListener('click', openHolidayModal);
+  document.getElementById('holidayClose').addEventListener('click', ()=> holidayOverlay.classList.remove('open'));
+  holidayOverlay.addEventListener('click', e=>{ if(e.target === holidayOverlay) holidayOverlay.classList.remove('open'); });
+
+  function openHolidayModal(){
+    renderHolidayList();
+    holidayOverlay.classList.add('open');
+  }
+
+  function renderHolidayList(){
+    const listEl = document.getElementById('holidayList');
+    const entries = Object.entries(state.holidays).sort((a,b)=> a[0]<b[0]?-1:1);
+    if(entries.length === 0){
+      listEl.innerHTML = `<div class="holiday-empty">등록된 공휴일이 없습니다.</div>`;
+      return;
+    }
+    listEl.innerHTML = entries.map(([date,name])=>`
+      <div class="h-row" data-date="${date}">
+        <span class="h-date mono">${date}</span>
+        <span class="h-name">${escapeHtml(name)}</span>
+        <button class="h-del" data-del="${date}" title="삭제">✕</button>
+      </div>
+    `).join('');
+    listEl.querySelectorAll('.h-del').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        if(!ensureEditor()) return;
+        delete state.holidays[btn.dataset.del];
+        renderHolidayList();
+        renderCalendar();
+        saveToSheet();
+      });
+    });
+  }
+
+  document.getElementById('newHolidayAdd').addEventListener('click', ()=>{
+    if(!ensureEditor()) return;
+    const dateInput = document.getElementById('newHolidayDate');
+    const nameInput = document.getElementById('newHolidayName');
+    const date = dateInput.value;
+    const name = nameInput.value.trim() || '공휴일';
+    if(!date){ alert('날짜를 선택해주세요.'); return; }
+    state.holidays[date] = name;
+    dateInput.value = ''; nameInput.value = '';
+    renderHolidayList();
+    renderCalendar();
+    saveToSheet('공휴일이 추가되었습니다');
+  });
+
+  // ---------- Toast ----------
+  let toastTimer = null;
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> t.classList.remove('show'), 2200);
+  }
+
+  // ---------- Helpers ----------
+  function escapeHtml(str){
+    return String(str||'').replace(/[&<>"']/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+  }
+  function escapeAttr(str){ return escapeHtml(str); }
+
+  function renderAll(){
+    renderTable();
+    renderSummary();
+    renderCalendar();
+  }
+
+  // ---------- Sheet tab navigation ----------
+  const pageTitleEl = document.getElementById('pageTitle');
+  document.querySelectorAll('.sheet-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.sheet-tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.page).classList.add('active');
+      pageTitleEl.textContent = tab.dataset.title;
+    });
+  });
+
+  populateYearSelect();
+  renderAll();
+
+})();
+</script>
+</body>
+</html>
