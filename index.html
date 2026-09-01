@@ -709,12 +709,28 @@
       const removedH=(oldH||[]).map(x=>x.date).filter(d=>!keepH.has(d));
       if(removedH.length){ const {error}=await supabase.from('holidays').delete().in('date',removedH); if(error) throw error; }
       if(holidayRows.length){ const {error}=await supabase.from('holidays').upsert(holidayRows,{onConflict:'date'}); if(error) throw error; }
-      const {error:se}=await supabase.from('schedule_settings').upsert({id:1,target_year:Number(state.targetYear)||new Date().getFullYear()},{onConflict:'id'});
-      if(se) throw se;
-      const t=new Date(); setSyncStatus(`● 저장 완료 · ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`,'ok');
-      if(message) showToast(message);
+      // 기준연도 설정은 일정 저장과 별개로 처리한다.
+      // 이 부분의 RLS/권한 문제 때문에 일정까지 '저장 실패'로 표시되지 않도록 한다.
+      const {error:se}=await supabase.from('schedule_settings').upsert(
+        {id:1,target_year:Number(state.targetYear)||new Date().getFullYear()},
+        {onConflict:'id'}
+      );
+
+      const t=new Date();
+      const time=`${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+
+      if(se){
+        console.warn('schedule_settings 저장 실패(일정 저장에는 영향 없음):', se);
+        setSyncStatus(`● 일정 저장 완료 · ${time}`,'ok');
+        if(message) showToast(message);
+      }else{
+        setSyncStatus(`● 저장 완료 · ${time}`,'ok');
+        if(message) showToast(message);
+      }
     }catch(err){
-      console.error(err); setSyncStatus('⚠ 저장 실패','err'); showToast('저장 실패: '+(err.message||err));
+      console.error(err);
+      setSyncStatus('⚠ 일정 저장 실패','err');
+      showToast('일정 저장 실패: '+(err.message||err));
     }finally{ saving=false; }
   }
   function saveNow(){
