@@ -325,6 +325,28 @@
   .auth-actions{display:flex;gap:8px;margin-top:18px}.auth-actions button{flex:1}.auth-error{min-height:18px;color:var(--danger);font-size:12px;margin-top:10px}
   .logout-btn{font-size:11px;padding:5px 8px}
 
+
+/* 업체명 검색창: 돋보기와 한글 placeholder가 겹치지 않도록 수정 */
+#companySearchWrap{
+  position:relative;
+}
+#companySearch{
+  padding-left:42px !important;
+}
+#companySearchIcon{
+  position:absolute;
+  left:14px;
+  top:50%;
+  transform:translateY(-50%);
+  pointer-events:none;
+  z-index:2;
+  font-size:16px;
+  line-height:1;
+}
+#companySearch::placeholder{
+  opacity:.7;
+}
+
 </style>
 </head>
 <body>
@@ -417,7 +439,7 @@
       <div class="list-filterbar">
         <div class="list-search">
           <span class="search-icon">🔎</span>
-          <input id="companySearch" type="text" placeholder="업체명으로 검색" autocomplete="off">
+          <div id="companySearchWrap" style="position:relative;flex:1;"><span id="companySearchIcon" aria-hidden="true">🔎</span><input id="companySearch" type="text" placeholder="업체명으로 검색" autocomplete="off"></div>
           <button type="button" class="clear-search" id="clearCompanySearch" title="검색어 지우기">✕</button>
         </div>
         <span class="active-filter" id="listFilterStatus"></span>
@@ -816,8 +838,10 @@
   function getFilteredCompanies(){
     const q = companySearch.trim().toLowerCase();
     return state.companies.filter(item=>{
-      const matchesSummary = summaryFilter === 'pending' ? !item.confirmed
+      const matchesSummary = summaryFilter === 'confirmed' ? !!item.confirmed
+        : summaryFilter === 'pending' ? !item.confirmed
         : summaryFilter === 'noDate' ? !item.plannedDate
+        : summaryFilter === 'awaitingReply' ? !!item.quoteSent && !item.quoteReplied
         : true;
       const matchesSearch = !q || String(item.name||'').toLowerCase().includes(q);
       return matchesSummary && matchesSearch;
@@ -831,8 +855,10 @@
       return;
     }
     if(visibleCompanies.length === 0){
-      const reason = summaryFilter === 'pending' ? '미확정 업체가 없습니다.'
+      const reason = summaryFilter === 'confirmed' ? '확정된 업체가 없습니다.'
+        : summaryFilter === 'pending' ? '미확정 업체가 없습니다.'
         : summaryFilter === 'noDate' ? '예정일 미입력 업체가 없습니다.'
+        : summaryFilter === 'awaitingReply' ? '견적 회신 대기 업체가 없습니다.'
         : '검색 조건에 맞는 업체가 없습니다.';
       tableBody.innerHTML = `<tr class="empty-row"><td colspan="10">${escapeHtml(reason)}</td></tr>`;
       return;
@@ -894,7 +920,11 @@
     const clearBtn = document.getElementById('clearListFilters');
     const clearSearch = document.getElementById('clearCompanySearch');
     if(!status || !clearBtn) return;
-    const filterLabel = summaryFilter === 'pending' ? '미확정' : summaryFilter === 'noDate' ? '예정일 미입력' : '';
+    const filterLabel = summaryFilter === 'confirmed' ? '확정'
+      : summaryFilter === 'pending' ? '미확정'
+      : summaryFilter === 'noDate' ? '예정일 미입력'
+      : summaryFilter === 'awaitingReply' ? '견적 회신 대기'
+      : '';
     const q = companySearch.trim();
     const visibleCount = getFilteredCompanies().length;
     const parts=[];
@@ -998,11 +1028,11 @@
     const noDate = state.companies.filter(c=>!c.plannedDate).length;
     const awaitingReply = state.companies.filter(c=>c.quoteSent && !c.quoteReplied).length;
     document.getElementById('summary').innerHTML = `
-      <div class="cell"><div class="num mono">${total}</div><div class="label">전체 업체</div></div>
-      <div class="cell confirmed"><div class="num mono">${confirmed}</div><div class="label">확정</div></div>
+      <div class="cell filterable ${summaryFilter===''?'active':''}" data-filter="" title="클릭하면 전체 업체가 표시됩니다"><div class="num mono">${total}</div><div class="label">전체 업체</div></div>
+      <div class="cell confirmed filterable ${summaryFilter==='confirmed'?'active':''}" data-filter="confirmed" title="클릭하면 확정 업체만 표시됩니다"><div class="num mono">${confirmed}</div><div class="label">확정</div></div>
       <div class="cell pending filterable ${summaryFilter==='pending'?'active':''}" data-filter="pending" title="클릭하면 미확정 업체만 표시됩니다"><div class="num mono">${pending}</div><div class="label">미확정</div></div>
       <div class="cell filterable ${summaryFilter==='noDate'?'active':''}" data-filter="noDate" title="클릭하면 예정일 미입력 업체만 표시됩니다"><div class="num mono">${noDate}</div><div class="label">예정일 미입력</div></div>
-      <div class="cell pending"><div class="num mono">${awaitingReply}</div><div class="label">견적 회신 대기</div></div>
+      <div class="cell pending filterable ${summaryFilter==='awaitingReply'?'active':''}" data-filter="awaitingReply" title="클릭하면 견적 회신 대기 업체만 표시됩니다"><div class="num mono">${awaitingReply}</div><div class="label">견적 회신 대기</div></div>
     `;
   }
 
@@ -1011,7 +1041,17 @@
     const cell = e.target.closest('.summary .cell.filterable');
     if(!cell) return;
     const nextFilter = cell.dataset.filter || '';
-    summaryFilter = summaryFilter === nextFilter ? '' : nextFilter;
+
+    // "전체 업체"는 모든 필터를 초기화해서 정말 전체 목록을 보여줍니다.
+    if(nextFilter === ''){
+      summaryFilter = '';
+      companySearch = '';
+      const searchInput = document.getElementById('companySearch');
+      if(searchInput) searchInput.value = '';
+    }else{
+      summaryFilter = summaryFilter === nextFilter ? '' : nextFilter;
+    }
+
     // 필터를 누르면 업체별 시험 항목 탭으로 이동
     const listTab = document.querySelector('.sheet-tab[data-page="page-list"]');
     if(listTab) listTab.click();
