@@ -78,6 +78,11 @@
   .summary .label{ font-size:11.5px; color:var(--ink-soft); margin-top:6px; letter-spacing:.02em; }
   .summary .cell.confirmed .num{ color:var(--accent); }
   .summary .cell.pending .num{ color:var(--pending); }
+  .summary .cell.filterable{ cursor:pointer; transition:.12s; position:relative; }
+  .summary .cell.filterable:hover{ background:#F7F8F7; }
+  .summary .cell.filterable.active{ background:var(--pending-soft); }
+  .summary .cell.filterable::after{ content:'클릭하여 목록 보기'; display:block; font-size:10px; color:var(--ink-soft); margin-top:5px; opacity:0; transition:.12s; }
+  .summary .cell.filterable:hover::after, .summary .cell.filterable.active::after{ opacity:1; }
 
   /* ---------- Panels ---------- */
   .panel{
@@ -89,6 +94,15 @@
   }
   .panel-head h2{ font-size:15px; margin:0; font-weight:600; }
   .panel-head .sub{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .list-filterbar{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 12px; padding:10px; background:#F7F8F7; border:1px solid var(--line); border-radius:7px; }
+  .list-search{ position:relative; flex:1 1 260px; min-width:220px; }
+  .list-search input{ width:100%; padding:8px 34px 8px 32px; border:1px solid var(--line-strong); border-radius:5px; font-family:'IBM Plex Sans KR', sans-serif; font-size:13px; background:var(--paper); color:var(--ink); }
+  .list-search input:focus{ outline:none; border-color:var(--ink); box-shadow:0 0 0 2px rgba(0,0,0,.05); }
+  .list-search .search-icon{ position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--ink-soft); pointer-events:none; }
+  .list-search .clear-search{ position:absolute; right:5px; top:50%; transform:translateY(-50%); width:28px; height:28px; padding:0; border:none; background:transparent; color:var(--ink-soft); display:none; }
+  .list-search .clear-search:hover{ border:none; color:var(--ink); }
+  .active-filter{ font-size:12px; color:var(--ink-soft); white-space:nowrap; }
+  .active-filter b{ color:var(--ink); }
 
   /* ---------- Table ---------- */
   table{ width:100%; border-collapse:collapse; font-size:13.5px; }
@@ -400,6 +414,15 @@
           <button id="btnAutoAll">작년 기준 일괄 설정</button>
         </div>
       </div>
+      <div class="list-filterbar">
+        <div class="list-search">
+          <span class="search-icon">🔎</span>
+          <input id="companySearch" type="text" placeholder="업체명으로 검색" autocomplete="off">
+          <button type="button" class="clear-search" id="clearCompanySearch" title="검색어 지우기">✕</button>
+        </div>
+        <span class="active-filter" id="listFilterStatus"></span>
+        <button type="button" class="small ghost" id="clearListFilters" style="display:none">필터 초기화</button>
+      </div>
       <div style="overflow-x:auto">
         <table id="scheduleTable">
           <thead>
@@ -586,6 +609,8 @@
   let memoEditingId = null;
   let currentUserEmail = '';
   let canEdit = false;
+  let companySearch = '';
+  let summaryFilter = '';
   let saving = false;
   let saveTimer = null;
 
@@ -788,12 +813,31 @@
     return `<span class="badge" style="background:${item.confirmed? color : 'transparent'}; color:${item.confirmed? '#fff' : color}; border:${item.confirmed? 'none' : '1.5px dashed '+color}">${escapeHtml(label)}</span>`;
   }
 
+  function getFilteredCompanies(){
+    const q = companySearch.trim().toLowerCase();
+    return state.companies.filter(item=>{
+      const matchesSummary = summaryFilter === 'pending' ? !item.confirmed
+        : summaryFilter === 'noDate' ? !item.plannedDate
+        : true;
+      const matchesSearch = !q || String(item.name||'').toLowerCase().includes(q);
+      return matchesSummary && matchesSearch;
+    });
+  }
+
   function renderTable(){
+    const visibleCompanies = getFilteredCompanies();
     if(state.companies.length === 0){
       tableBody.innerHTML = `<tr class="empty-row"><td colspan="10">등록된 업체가 없습니다. "+ 업체 추가"로 시작하세요.</td></tr>`;
       return;
     }
-    tableBody.innerHTML = state.companies.map(item => {
+    if(visibleCompanies.length === 0){
+      const reason = summaryFilter === 'pending' ? '미확정 업체가 없습니다.'
+        : summaryFilter === 'noDate' ? '예정일 미입력 업체가 없습니다.'
+        : '검색 조건에 맞는 업체가 없습니다.';
+      tableBody.innerHTML = `<tr class="empty-row"><td colspan="10">${escapeHtml(reason)}</td></tr>`;
+      return;
+    }
+    tableBody.innerHTML = visibleCompanies.map(item => {
       const isEtc = item.testType === '기타';
       return `
       <tr data-id="${item.id}">
@@ -843,6 +887,22 @@
         </td>
       </tr>`;
     }).join('');
+  }
+
+  function renderListFilterStatus(){
+    const status = document.getElementById('listFilterStatus');
+    const clearBtn = document.getElementById('clearListFilters');
+    const clearSearch = document.getElementById('clearCompanySearch');
+    if(!status || !clearBtn) return;
+    const filterLabel = summaryFilter === 'pending' ? '미확정' : summaryFilter === 'noDate' ? '예정일 미입력' : '';
+    const q = companySearch.trim();
+    const visibleCount = getFilteredCompanies().length;
+    const parts=[];
+    if(filterLabel) parts.push(`<b>필터: ${filterLabel}</b>`);
+    if(q) parts.push(`업체명: <b>“${escapeHtml(q)}”</b>`);
+    status.innerHTML = parts.length ? `${parts.join(' · ')} · ${visibleCount}개 업체` : `${state.companies.length}개 업체`;
+    clearBtn.style.display = (summaryFilter || q) ? '' : 'none';
+    if(clearSearch) clearSearch.style.display = q ? 'block' : 'none';
   }
 
   tableBody.addEventListener('input', e=>{
@@ -940,11 +1000,49 @@
     document.getElementById('summary').innerHTML = `
       <div class="cell"><div class="num mono">${total}</div><div class="label">전체 업체</div></div>
       <div class="cell confirmed"><div class="num mono">${confirmed}</div><div class="label">확정</div></div>
-      <div class="cell pending"><div class="num mono">${pending}</div><div class="label">미확정</div></div>
-      <div class="cell"><div class="num mono">${noDate}</div><div class="label">예정일 미입력</div></div>
+      <div class="cell pending filterable ${summaryFilter==='pending'?'active':''}" data-filter="pending" title="클릭하면 미확정 업체만 표시됩니다"><div class="num mono">${pending}</div><div class="label">미확정</div></div>
+      <div class="cell filterable ${summaryFilter==='noDate'?'active':''}" data-filter="noDate" title="클릭하면 예정일 미입력 업체만 표시됩니다"><div class="num mono">${noDate}</div><div class="label">예정일 미입력</div></div>
       <div class="cell pending"><div class="num mono">${awaitingReply}</div><div class="label">견적 회신 대기</div></div>
     `;
   }
+
+  const summaryEl = document.getElementById('summary');
+  summaryEl.addEventListener('click', e=>{
+    const cell = e.target.closest('.summary .cell.filterable');
+    if(!cell) return;
+    const nextFilter = cell.dataset.filter || '';
+    summaryFilter = summaryFilter === nextFilter ? '' : nextFilter;
+    // 필터를 누르면 업체별 시험 항목 탭으로 이동
+    const listTab = document.querySelector('.sheet-tab[data-page="page-list"]');
+    if(listTab) listTab.click();
+    renderSummary();
+    renderTable();
+    renderListFilterStatus();
+  });
+
+  const companySearchEl = document.getElementById('companySearch');
+  const clearCompanySearchEl = document.getElementById('clearCompanySearch');
+  const clearListFiltersEl = document.getElementById('clearListFilters');
+  companySearchEl.addEventListener('input', e=>{
+    companySearch = e.target.value;
+    renderTable();
+    renderListFilterStatus();
+  });
+  clearCompanySearchEl.addEventListener('click', ()=>{
+    companySearch='';
+    companySearchEl.value='';
+    renderTable();
+    renderListFilterStatus();
+    companySearchEl.focus();
+  });
+  clearListFiltersEl.addEventListener('click', ()=>{
+    summaryFilter='';
+    companySearch='';
+    companySearchEl.value='';
+    renderSummary();
+    renderTable();
+    renderListFilterStatus();
+  });
 
   // ---------- Memo modal ----------
   const memoOverlay = document.getElementById('memoOverlay');
@@ -1265,6 +1363,7 @@
   function renderAll(){
     renderTable();
     renderSummary();
+    renderListFilterStatus();
     renderCalendar();
   }
 
