@@ -374,6 +374,16 @@
   opacity:.7;
 }
 
+
+  .money-stack{display:flex;flex-direction:column;gap:4px;min-width:110px;}
+  .money-stack .calc-receivable{font-size:10px;color:var(--ink-soft);text-align:right;white-space:nowrap;}
+  .money-stack .calc-receivable.has-debt{color:var(--danger);font-weight:600;}
+  .other-paid-wrap{display:none;margin-top:7px;}
+  .other-paid-wrap.show{display:block;}
+  .other-paid-wrap label{font-size:11px;color:var(--ink-soft);}
+  .other-paid-wrap input{margin-top:4px;width:100%;box-sizing:border-box;}
+  .entry-finance-hint{font-size:10.5px;color:var(--ink-soft);margin-top:5px;line-height:1.45;}
+
 </style>
 </head>
 <body>
@@ -456,7 +466,7 @@
       <div class="panel-head">
         <div>
           <h2>업체별 시험 항목</h2>
-          <div class="sub">업체명 · 시험항목 · 지역 · 작년 시험일 · 올해 예정일 · 확정 · 견적 · 미수금 · 입금진행률 · 입금예정일 · 메모</div>
+          <div class="sub">업체명 · 시험항목 · 지역 · 작년 시험일 · 올해 예정일 · 확정 · 견적 · 메모</div>
         </div>
         <div style="display:flex; gap:8px">
           <button class="primary" id="btnAdd">+ 업체 추가</button>
@@ -484,13 +494,10 @@
               <th style="width:12%">작년 시험일</th>
               <th style="width:12%">올해 예정일</th>
               <th style="width:7%; text-align:center">확정</th>
-              <th style="width:7%; text-align:center">견적발송</th>
-              <th style="width:7%; text-align:center">견적회신</th>
-              <th style="width:10%; text-align:center">미수금</th>
-              <th style="width:17%; text-align:center">입금진행률</th>
-              <th style="width:10%; text-align:center">입금예정일</th>
+              <th style="width:8%; text-align:center">견적발송</th>
+              <th style="width:8%; text-align:center">견적회신</th>
               <th style="width:6%; text-align:center">메모</th>
-              <th style="width:5%; text-align:center"></th>
+              <th style="width:6%; text-align:center"></th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -506,7 +513,7 @@
       <div class="panel-head">
         <div>
           <h2>💰 미수금 관리</h2>
-          <div class="sub">업체별 현재 미수금과 입금 진행률, 입금 예정일을 한눈에 확인합니다.</div>
+          <div class="sub">업체별 시험비, 입금액, 현재 미수금과 입금 예정일을 한눈에 확인합니다.</div>
         </div>
       </div>
       <div class="receivable-page-summary" id="receivableSummary"></div>
@@ -524,18 +531,20 @@
         <table id="receivableTable">
           <thead>
             <tr>
-              <th style="width:22%">업체명</th>
-              <th style="width:13%">시험 예정일</th>
-              <th style="width:14%;text-align:right">미수금</th>
-              <th style="width:20%;text-align:center">입금 진행률</th>
-              <th style="width:14%">입금 예정일</th>
+              <th style="width:18%">업체명</th>
+              <th style="width:11%">시험 예정일</th>
+              <th style="width:13%;text-align:right">시험비</th>
+              <th style="width:13%;text-align:right">입금액</th>
+              <th style="width:13%;text-align:right">미수금</th>
+              <th style="width:15%;text-align:center">입금 진행률</th>
+              <th style="width:10%">입금 예정일</th>
               <th style="width:17%">상태</th>
             </tr>
           </thead>
           <tbody id="receivableBody"></tbody>
         </table>
       </div>
-      <div class="receivable-note">※ 미수금 금액은 현재 남아 있는 금액을 직접 입력합니다. 입금 진행률은 50% / 70% / 100% / 기타 중 하나를 선택합니다. 입금 예정일이 오늘보다 이전이고 미수금이 있으면 <b>예정일 지남</b>으로 표시됩니다.</div>
+      <div class="receivable-note">※ 시험비를 입력하면 50% / 70% / 100% 선택 시 입금액과 미수금이 자동 계산됩니다. <b>기타</b>를 선택하면 실제 입금액을 직접 입력할 수 있습니다. 입금 예정일이 오늘보다 이전이고 미수금이 있으면 <b>예정일 지남</b>으로 표시됩니다.</div>
     </section>
   </div>
 </div>
@@ -588,8 +597,8 @@
         </label>
       </div>
       <div class="entry-row">
-        <label>미수금 금액 (원)
-          <input type="number" id="entryReceivableAmount" min="0" step="1000" placeholder="0">
+        <label>시험비 (원)
+          <input type="number" id="entryExamFee" min="0" step="1000" placeholder="0">
         </label>
         <label>입금 예정일
           <input type="date" id="entryPaymentDueDate">
@@ -603,6 +612,12 @@
           <label class="payment-check"><input type="checkbox" data-entry-payment="100"> 100%</label>
           <label class="payment-check"><input type="checkbox" data-entry-payment="other"> 기타</label>
         </div>
+        <div class="other-paid-wrap" id="entryOtherPaidWrap">
+          <label>기타 입금액 (원)
+            <input type="number" id="entryOtherPaidAmount" min="0" step="1000" placeholder="실제 입금된 금액">
+          </label>
+        </div>
+        <div class="entry-finance-hint">50% / 70% / 100% 선택 시 시험비를 기준으로 입금액과 미수금이 자동 계산됩니다.</div>
       </div>
       <label>메모
         <textarea id="entryMemo" style="min-height:70px" placeholder="특이사항, 연락 이력 등"></textarea>
@@ -710,9 +725,9 @@
     targetYear: new Date().getFullYear(),
     holidays: Object.assign({}, HOLIDAYS_SEED),
     companies: [
-      { id: uid(), name:'대한계측', testType:'V', testTypeCustom:'', region:'경기 안산', lastYearDate: (new Date().getFullYear()-1)+'-03-14', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', memo:'매년 3월 둘째 주 선호. 담당자: 김OO 과장' },
-      { id: uid(), name:'한빛시험소', testType:'RV', testTypeCustom:'', region:'충남 아산', lastYearDate: (new Date().getFullYear()-1)+'-05-22', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', memo:'' },
-      { id: uid(), name:'삼성정밀', testType:'M', testTypeCustom:'', region:'부산', lastYearDate: (new Date().getFullYear()-1)+'-09-05', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', memo:'현장 접근 어려움 - 전날 사전 연락 필수' },
+      { id: uid(), name:'대한계측', testType:'V', testTypeCustom:'', region:'경기 안산', lastYearDate: (new Date().getFullYear()-1)+'-03-14', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', memo:'매년 3월 둘째 주 선호. 담당자: 김OO 과장' },
+      { id: uid(), name:'한빛시험소', testType:'RV', testTypeCustom:'', region:'충남 아산', lastYearDate: (new Date().getFullYear()-1)+'-05-22', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', memo:'' },
+      { id: uid(), name:'삼성정밀', testType:'M', testTypeCustom:'', region:'부산', lastYearDate: (new Date().getFullYear()-1)+'-09-05', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', memo:'현장 접근 어려움 - 전날 사전 연락 필수' },
     ]
   };
 
@@ -802,6 +817,7 @@
         testTypeCustom:String(c.test_type_custom||''), region:String(c.region||''),
         lastYearDate:String(c.last_year_date||''), plannedDate:String(c.planned_date||''),
         confirmed:!!c.confirmed, quoteSent:!!c.quote_sent, quoteReplied:!!c.quote_replied,
+        examFee:Number(c.exam_fee||0), otherPaidAmount:Number(c.other_paid_amount||0),
         receivableAmount:Number(c.receivable_amount||0), paymentStatus:String(c.payment_status||'none'),
         paymentDueDate:String(c.payment_due_date||''), memo:String(c.memo||'')
       }));
@@ -827,7 +843,8 @@
         test_type_custom:String(c.testTypeCustom||''), region:String(c.region||''),
         last_year_date:c.lastYearDate||null, planned_date:c.plannedDate||null,
         confirmed:!!c.confirmed, quote_sent:!!c.quoteSent, quote_replied:!!c.quoteReplied,
-        receivable_amount:Math.max(0, Number(c.receivableAmount||0)), payment_status:String(c.paymentStatus||'none'),
+        exam_fee:getExamFee(c), other_paid_amount:getOtherPaidAmount(c),
+        receivable_amount:getReceivableAmount(c), payment_status:String(c.paymentStatus||'none'),
         payment_due_date:c.paymentDueDate||null, memo:String(c.memo||'')
       }));
       const {data:{user}}=await supabase.auth.getUser();
@@ -944,7 +961,7 @@
   function renderTable(){
     const visibleCompanies = getFilteredCompanies();
     if(state.companies.length === 0){
-      tableBody.innerHTML = `<tr class="empty-row"><td colspan="13">등록된 업체가 없습니다. "+ 업체 추가"로 시작하세요.</td></tr>`;
+      tableBody.innerHTML = `<tr class="empty-row"><td colspan="10">등록된 업체가 없습니다. "+ 업체 추가"로 시작하세요.</td></tr>`;
       return;
     }
     if(visibleCompanies.length === 0){
@@ -953,7 +970,7 @@
         : summaryFilter === 'noDate' ? '예정일 미입력 업체가 없습니다.'
         : summaryFilter === 'awaitingReply' ? '견적 회신 대기 업체가 없습니다.'
         : '검색 조건에 맞는 업체가 없습니다.';
-      tableBody.innerHTML = `<tr class="empty-row"><td colspan="13">${escapeHtml(reason)}</td></tr>`;
+      tableBody.innerHTML = `<tr class="empty-row"><td colspan="10">${escapeHtml(reason)}</td></tr>`;
       return;
     }
     tableBody.innerHTML = visibleCompanies.map(item => {
@@ -996,17 +1013,6 @@
             <input type="checkbox" ${item.quoteReplied?'checked':''} ${item.quoteSent && canEdit?'':'disabled'} data-field="quoteReplied" title="${item.quoteSent? '' : '견적서 발송 후 체크할 수 있어요'}">
           </div>
         </td>
-        <td data-label="미수금">
-          <input class="money-input" type="number" min="0" step="1000" value="${Number(item.receivableAmount||0)}" data-field="receivableAmount" placeholder="0" ${canEdit?'':'disabled'}>
-        </td>
-        <td data-label="입금진행률">
-          <div class="payment-checks">
-            ${[['50','50%'],['70','70%'],['100','100%'],['other','기타']].map(([v,l])=>`<label class="payment-check ${item.paymentStatus===v?'selected':''}"><input type="checkbox" data-field="paymentStatus" data-payment-value="${v}" ${item.paymentStatus===v?'checked':''} ${canEdit?'':'disabled'}> ${l}</label>`).join('')}
-          </div>
-        </td>
-        <td data-label="입금예정일">
-          <input class="payment-due-input" type="date" value="${item.paymentDueDate||''}" data-field="paymentDueDate" ${canEdit?'':'disabled'}>
-        </td>
         <td style="text-align:center" data-label="메모">
           <button class="memo-btn ${item.memo && item.memo.trim() ? 'has-memo':''}" data-action="memo" title="메모 보기/편집">📝</button>
         </td>
@@ -1031,7 +1037,28 @@
     const t=new Date();
     return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
   }
-  function isReceivable(item){ return Number(item.receivableAmount||0) > 0; }
+  function getExamFee(item){
+    return Math.max(0, Number(item.examFee||0));
+  }
+  function getPaidAmount(item){
+    const fee=getExamFee(item);
+    const status=String(item.paymentStatus||'none');
+    if(status==='50') return Math.min(fee, fee*0.5);
+    if(status==='70') return Math.min(fee, fee*0.7);
+    if(status==='100') return fee;
+    if(status==='other') return Math.min(fee, Math.max(0, Number(item.otherPaidAmount||0)));
+    return 0;
+  }
+  function getOtherPaidAmount(item){
+    return Math.max(0, Number(item.otherPaidAmount||0));
+  }
+  function getReceivableAmount(item){
+    const fee=getExamFee(item);
+    // 기존 버전에서 입력한 미수금 데이터는 새 시험비 데이터가 없는 경우 그대로 표시합니다.
+    if(fee<=0 && Number(item.receivableAmount||0)>0 && String(item.paymentStatus||'none')==='none') return Math.max(0, Number(item.receivableAmount||0));
+    return Math.max(0, fee-getPaidAmount(item));
+  }
+  function isReceivable(item){ return getReceivableAmount(item) > 0; }
   function isOverdue(item){ return isReceivable(item) && !!item.paymentDueDate && item.paymentDueDate < todayYmd(); }
   function paymentStatusText(status){
     return ({'50':'50%','70':'70%','100':'100%','other':'기타','none':'미입력'})[status] || '미입력';
@@ -1039,7 +1066,7 @@
   function receivableStatusText(item){
     if(!isReceivable(item)) return '<span class="receivable-paid">입금완료/미수금 없음</span>';
     if(isOverdue(item)) return '<span class="receivable-overdue">⚠ 입금 예정일 지남</span>';
-    if(item.paymentStatus === '100') return '<span class="receivable-paid">✓ 100% 완료 · 금액 확인</span>';
+    if(item.paymentStatus === '100') return '<span class="receivable-paid">✓ 100% 입금완료</span>';
     if(item.paymentDueDate) return `<span>입금예정 ${escapeHtml(item.paymentDueDate)}</span>`;
     return '<span>미수금</span>';
   }
@@ -1056,7 +1083,7 @@
   }
   function renderReceivableSummary(){
     const receivables=state.companies.filter(isReceivable);
-    const total=receivables.reduce((sum,c)=>sum+Number(c.receivableAmount||0),0);
+    const total=receivables.reduce((sum,c)=>sum+getReceivableAmount(c),0);
     const overdue=receivables.filter(isOverdue).length;
     const dueSoon=receivables.filter(c=>c.paymentDueDate && c.paymentDueDate>=todayYmd()).length;
     const completed=state.companies.filter(c=>c.paymentStatus==='100' || !isReceivable(c)).length;
@@ -1072,7 +1099,7 @@
     if(!body) return;
     const rows=getReceivableCompanies();
     if(!rows.length){
-      body.innerHTML='<tr><td colspan="6" class="receivable-empty">조건에 맞는 업체가 없습니다.</td></tr>';
+      body.innerHTML='<tr><td colspan="8" class="receivable-empty">조건에 맞는 업체가 없습니다.</td></tr>';
       return;
     }
     body.innerHTML=rows.map(item=>{
@@ -1081,7 +1108,9 @@
       return `<tr data-id="${item.id}">
         <td>${escapeHtml(item.name||'(이름 없음)')}</td>
         <td>${escapeHtml(item.plannedDate||'-')}</td>
-        <td class="receivable-amount">${formatWon(item.receivableAmount)}</td>
+        <td class="receivable-amount">${formatWon(getExamFee(item))}</td>
+        <td class="receivable-amount">${formatWon(getPaidAmount(item))}</td>
+        <td class="receivable-amount ${getReceivableAmount(item)>0?'receivable-overdue':''}">${formatWon(getReceivableAmount(item))}</td>
         <td style="text-align:center"><span class="badge" style="background:${status==='100'?'var(--accent)':'#F7F8F7'};color:${status==='100'?'#fff':'var(--ink)'};border:1px solid var(--line)">${escapeHtml(paymentStatusText(status))}</span></td>
         <td>${escapeHtml(item.paymentDueDate||'-')}</td>
         <td class="${overdue?'receivable-overdue':''}">${receivableStatusText(item)}</td>
@@ -1149,8 +1178,17 @@
       saveToSheet();
       return;
     }
-    if(field === 'receivableAmount'){
-      item.receivableAmount = Math.max(0, Number(e.target.value||0));
+    if(field === 'examFee'){
+      item.examFee = Math.max(0, Number(e.target.value||0));
+      item.receivableAmount = getReceivableAmount(item);
+      renderReceivablePage();
+      renderReceivableSummary();
+      saveToSheet();
+      return;
+    }
+    if(field === 'otherPaidAmount'){
+      item.otherPaidAmount = Math.max(0, Number(e.target.value||0));
+      item.receivableAmount = getReceivableAmount(item);
       renderReceivablePage();
       renderReceivableSummary();
       saveToSheet();
@@ -1206,7 +1244,7 @@
   // ---------- Toolbar actions ----------
   document.getElementById('btnAdd').addEventListener('click', ()=>{
     if(!ensureEditor()) return;
-    state.companies.push({ id:uid(), name:'', testType:'V', testTypeCustom:'', region:'', lastYearDate:'', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', memo:'' });
+    state.companies.push({ id:uid(), name:'', testType:'V', testTypeCustom:'', region:'', lastYearDate:'', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', memo:'' });
     renderAll();
     saveToSheet();
     const rows = tableBody.querySelectorAll('tr[data-id] input[data-field="name"]');
@@ -1449,7 +1487,7 @@
       entryState.id = id;
       entryState.dateStr = item.plannedDate;
     } else {
-      item = { name:'', testType:'V', testTypeCustom:'', region:'', memo:'', confirmed:false, quoteSent:false, quoteReplied:false, receivableAmount:0, paymentStatus:'none', paymentDueDate:'' };
+      item = { name:'', testType:'V', testTypeCustom:'', region:'', memo:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'' };
       entryState.id = null;
       entryState.dateStr = dateStr;
     }
@@ -1461,12 +1499,14 @@
     document.getElementById('entryTestCustom').value = item.testTypeCustom || '';
     entryTestCustomWrap.style.display = item.testType === '기타' ? 'flex' : 'none';
     document.getElementById('entryRegion').value = item.region || '';
-    document.getElementById('entryReceivableAmount').value = Number(item.receivableAmount||0);
+    document.getElementById('entryExamFee').value = getExamFee(item);
+    document.getElementById('entryOtherPaidAmount').value = getOtherPaidAmount(item);
     document.getElementById('entryPaymentDueDate').value = item.paymentDueDate || '';
     document.querySelectorAll('#entryPaymentChecks input[data-entry-payment]').forEach(cb=>{
       cb.checked = (item.paymentStatus || 'none') === cb.dataset.entryPayment;
       cb.closest('.payment-check')?.classList.toggle('selected', cb.checked);
     });
+    toggleEntryOtherPaid();
     document.getElementById('entryMemo').value = item.memo || '';
     document.getElementById('entryConfirmed').checked = !!item.confirmed;
     document.getElementById('entryQuoteSent').checked = !!item.quoteSent;
@@ -1501,12 +1541,19 @@
     entryTestCustomWrap.style.display = entryTestType.value === '기타' ? 'flex' : 'none';
   });
 
+  function toggleEntryOtherPaid(){
+    const checked=document.querySelector('#entryPaymentChecks input[data-entry-payment]:checked');
+    const isOther=checked?.dataset.entryPayment==='other';
+    const wrap=document.getElementById('entryOtherPaidWrap');
+    if(wrap) wrap.classList.toggle('show', !!isOther);
+  }
   document.querySelectorAll('#entryPaymentChecks input[data-entry-payment]').forEach(cb=>{
     cb.addEventListener('change', ()=>{
       document.querySelectorAll('#entryPaymentChecks input[data-entry-payment]').forEach(other=>{
         if(other !== cb) other.checked = false;
         other.closest('.payment-check')?.classList.toggle('selected', other.checked);
       });
+      toggleEntryOtherPaid();
     });
   });
 
@@ -1528,7 +1575,8 @@
       testType: entryTestType.value,
       testTypeCustom: document.getElementById('entryTestCustom').value.trim(),
       region: document.getElementById('entryRegion').value.trim(),
-      receivableAmount: Math.max(0, Number(document.getElementById('entryReceivableAmount').value||0)),
+      examFee: Math.max(0, Number(document.getElementById('entryExamFee').value||0)),
+      otherPaidAmount: Math.max(0, Number(document.getElementById('entryOtherPaidAmount').value||0)),
       paymentDueDate: document.getElementById('entryPaymentDueDate').value || '',
       paymentStatus: document.querySelector('#entryPaymentChecks input[data-entry-payment]:checked')?.dataset.entryPayment || 'none',
       memo: document.getElementById('entryMemo').value,
@@ -1537,6 +1585,7 @@
       quoteReplied: document.getElementById('entryQuoteSent').checked && document.getElementById('entryQuoteReplied').checked,
       plannedDate: entryState.dateStr || ''
     };
+    payload.receivableAmount = getReceivableAmount(payload);
     if(entryState.mode === 'edit'){
       const item = state.companies.find(c=>c.id===entryState.id);
       Object.assign(item, payload);
@@ -1646,6 +1695,13 @@
       tab.classList.add('active');
       document.getElementById(tab.dataset.page).classList.add('active');
       pageTitleEl.textContent = tab.dataset.title;
+
+      // 미수금 관리 화면에서는 일정용 요약(전체/확정/미확정/예정일/견적회신)을 숨깁니다.
+      const globalSummary = document.getElementById('summary');
+      if(globalSummary){
+        globalSummary.style.display = tab.dataset.page === 'page-receivable' ? 'none' : '';
+      }
+
       if(tab.dataset.page === 'page-receivable'){
         renderReceivableSummary();
         renderReceivablePage();
