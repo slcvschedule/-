@@ -398,6 +398,11 @@
     width:min(92vw,460px);
   }
 
+
+  .receivable-edit-btn{ margin-left:0; padding:4px 10px; font-size:12px; white-space:nowrap; }
+  #receivableEditModal.modal-backdrop{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999; background:rgba(0,0,0,.35); }
+  #receivableEditModal .modal-card{ width:min(92vw,460px); box-sizing:border-box; }
+
 </style>
 </head>
 <body>
@@ -1113,7 +1118,7 @@
     if(!body) return;
     const rows=getReceivableCompanies();
     if(!rows.length){
-      body.innerHTML='<tr><td colspan="8" class="receivable-empty">조건에 맞는 업체가 없습니다.</td></tr>';
+      body.innerHTML='<tr><td colspan="9" class="receivable-empty">조건에 맞는 업체가 없습니다.</td></tr>';
       return;
     }
     body.innerHTML=rows.map(item=>{
@@ -1137,9 +1142,8 @@
         <td class="receivable-amount ${getReceivableAmount(item)>0?'receivable-overdue':''}">${formatWon(getReceivableAmount(item))}</td>
         <td style="text-align:center">${escapeHtml(paymentStatusText(status))}</td>
         <td>${dueInput}</td>
-        <td class="${overdue?'receivable-overdue':''}">${receivableStatusText(item)}
-          ${canEdit ? `<button type="button" class="btn small receivable-edit-btn" data-receivable-edit="${item.id}">수정</button>` : ''}
-        </td>
+<td class="${overdue?'receivable-overdue':''}">${receivableStatusText(item)}</td>
+        <td style="text-align:center">${canEdit ? `<button type="button" class="btn small receivable-edit-btn" data-receivable-edit="${item.id}">수정</button>` : '-'}</td>
       </tr>`;
     }).join('');
   }
