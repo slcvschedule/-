@@ -172,7 +172,7 @@
   .receivable-amount{ font-family:'IBM Plex Mono',monospace; text-align:right; white-space:nowrap; }
   .receivable-empty{ text-align:center; color:var(--ink-soft); padding:30px 10px; }
   .receivable-note{ font-size:11px; color:var(--ink-soft); margin-top:8px; line-height:1.5; }
-  .receivable-edit-input,.receivable-edit{ min-width:90px; box-sizing:border-box; }
+  .receivable-edit-input{ min-width:90px; box-sizing:border-box; }
   .receivable-edit-input:disabled,.receivable-edit:disabled{ opacity:1; background:#fafafa; color:inherit; }
 
   @media (max-width:720px){
@@ -1129,7 +1129,7 @@
       const statusSelect = `<select class="field receivable-edit" data-receivable-field="paymentStatus" ${canEdit?'':'disabled'}>
         ${statusOptions.map(v=>`<option value="${v}" ${status===v?'selected':''}>${statusLabels[v]}</option>`).join('')}
       </select>`;
-      const feeInput = `<input class="money-input receivable-edit-input" type="number" min="0" step="1000" value="${getExamFee(item)||''}" data-receivable-field="examFee" placeholder="0" ${canEdit?'':'disabled'}>`;
+      const feeInput = `${formatWon(getExamFee(item))}`;
       const dueInput = `<input class="payment-due-input receivable-edit-input" type="date" value="${escapeAttr(item.paymentDueDate||'')}" data-receivable-field="paymentDueDate" ${canEdit?'':'disabled'}>`;
       const otherInput = status==='other'
         ? `<input class="money-input receivable-edit-input" style="margin-top:5px;width:100%;box-sizing:border-box" type="number" min="0" step="1000" value="${getOtherPaidAmount(item)||''}" data-receivable-field="otherPaidAmount" placeholder="기타 입금액" ${canEdit?'':'disabled'}>`
@@ -1159,9 +1159,7 @@
     const item = state.companies.find(c=>c.id===tr.dataset.id);
     if(!item) return;
 
-    if(field === 'examFee'){
-      item.examFee = Math.max(0, Number(e.target.value || 0));
-    }else if(field === 'paymentStatus'){
+    if(field === 'paymentStatus'){
       item.paymentStatus = e.target.value || 'none';
       if(item.paymentStatus !== 'other') item.otherPaidAmount = 0;
     }else if(field === 'otherPaidAmount'){
@@ -1805,7 +1803,8 @@
     const paid = Math.max(0, Number(document.getElementById('receivableEditPaid').value || 0));
     const fee = Math.max(0, Number(getExamFee(item) || 0));
 
-    // 시험비와 입금 예정일은 그대로 두고, 입금액만 수정합니다.
+    // 이 창에서는 "입금액"만 수정합니다.
+    // 시험비와 입금 예정일은 절대 변경하지 않습니다.
     if(fee > 0 && paid === fee){
       item.paymentStatus = '100';
       item.otherPaidAmount = 0;
