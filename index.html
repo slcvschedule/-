@@ -403,6 +403,10 @@
   #receivableEditModal.modal-backdrop{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999; background:rgba(0,0,0,.35); }
   #receivableEditModal .modal-card{ width:min(92vw,460px); box-sizing:border-box; }
 
+
+  .receivable-paid-input{width:100%;min-width:105px;box-sizing:border-box;}
+  .receivable-status-cell{min-width:150px;white-space:nowrap;}
+
 </style>
 </head>
 <body>
@@ -1139,39 +1143,51 @@
         <td>${escapeHtml(item.plannedDate||'-')}</td>
         <td class="receivable-amount">${feeInput}</td>
         <td class="receivable-amount">
-          ${formatWon(getPaidAmount(item))}
-          ${canEdit ? `<button type="button" class="text-edit-btn" data-receivable-edit="${item.id}">수정</button>` : ''}
+          <input class="money-input receivable-paid-input" type="number" min="0" step="1000"
+                 value="${getPaidAmount(item)||''}" data-field="receivablePaid"
+                 placeholder="0" ${canEdit?'':'disabled'}>
         </td>
         <td class="receivable-amount ${getReceivableAmount(item)>0?'receivable-overdue':''}">${formatWon(getReceivableAmount(item))}</td>
         <td style="text-align:center">${escapeHtml(paymentStatusText(status))}</td>
         <td>${dueInput}</td>
-<td class="${overdue?'receivable-overdue':''}">${receivableStatusText(item)}</td>
+<td class="receivable-status-cell ${overdue?'receivable-overdue':''}">${receivableStatusText(item)}</td>
       </tr>`;
     }).join('');
   }
 
-  document.getElementById('receivableBody').addEventListener('change', e=>{
+  document.getElementById('receivableBody').addEventListener('change', async e=>{
     if(!canEdit) return;
-    const field = e.target.dataset.receivableField;
-    if(!field) return;
+    const field = e.target.dataset.field;
+    if(field !== 'receivablePaid') return;
+
     const tr = e.target.closest('tr[data-id]');
     if(!tr) return;
     const item = state.companies.find(c=>c.id===tr.dataset.id);
     if(!item) return;
 
-    if(field === 'paymentStatus'){
-      item.paymentStatus = e.target.value || 'none';
-      if(item.paymentStatus !== 'other') item.otherPaidAmount = 0;
-    }else if(field === 'otherPaidAmount'){
-      item.otherPaidAmount = Math.max(0, Number(e.target.value || 0));
-    }else if(field === 'paymentDueDate'){
-      item.paymentDueDate = e.target.value || '';
+    const fee = Math.max(0, Number(getExamFee(item) || 0));
+    const paid = Math.max(0, Number(e.target.value || 0));
+
+    // 미수금 관리 화면에서는 입금액만 수정합니다.
+    // 시험비와 입금 예정일은 변경하지 않습니다.
+    if(fee > 0 && paid === fee){
+      item.paymentStatus = '100';
+      item.otherPaidAmount = 0;
+    }else if(fee > 0 && paid === fee * 0.7){
+      item.paymentStatus = '70';
+      item.otherPaidAmount = 0;
+    }else if(fee > 0 && paid === fee * 0.5){
+      item.paymentStatus = '50';
+      item.otherPaidAmount = 0;
+    }else{
+      item.paymentStatus = 'other';
+      item.otherPaidAmount = paid;
     }
 
-    item.receivableAmount = getReceivableAmount(item);
+    item.receivableAmount = Math.max(0, fee - paid);
     renderReceivableSummary();
     renderReceivablePage();
-    saveToSheet();
+    await saveToSheet();
   });
 
   document.getElementById('receivableSearch').addEventListener('input',e=>{
@@ -1769,90 +1785,10 @@
 
 })();
 
-  let receivableEditingId = null;
 
-  function openReceivableEdit(id){
-    if(!canEdit) return;
-    const item = state.companies.find(c=>c.id===id);
-    if(!item) return;
-    receivableEditingId = id;
-    document.getElementById('receivableEditCompany').textContent = item.name || '(이름 없음)';
-    document.getElementById('receivableEditPaid').value = getPaidAmount(item) || '';
-    document.getElementById('receivableEditModal').style.display = 'flex';
-  }
-
-  function closeReceivableEdit(){
-    receivableEditingId = null;
-    document.getElementById('receivableEditModal').style.display = 'none';
-  }
-
-  document.getElementById('receivableBody').addEventListener('click', e=>{
-    const btn = e.target.closest('[data-receivable-edit]');
-    if(!btn) return;
-    openReceivableEdit(btn.dataset.receivableEdit);
-  });
-
-  document.getElementById('receivableEditClose').addEventListener('click', closeReceivableEdit);
-  document.getElementById('receivableEditCancel').addEventListener('click', closeReceivableEdit);
-
-  document.getElementById('receivableEditSave').addEventListener('click', async ()=>{
-    if(!canEdit || !receivableEditingId) return;
-    const item = state.companies.find(c=>c.id===receivableEditingId);
-    if(!item) return;
-
-    const paid = Math.max(0, Number(document.getElementById('receivableEditPaid').value || 0));
-    const fee = Math.max(0, Number(getExamFee(item) || 0));
-
-    // 이 창에서는 "입금액"만 수정합니다.
-    // 시험비와 입금 예정일은 절대 변경하지 않습니다.
-    if(fee > 0 && paid === fee){
-      item.paymentStatus = '100';
-      item.otherPaidAmount = 0;
-    }else if(fee > 0 && paid === fee * 0.7){
-      item.paymentStatus = '70';
-      item.otherPaidAmount = 0;
-    }else if(fee > 0 && paid === fee * 0.5){
-      item.paymentStatus = '50';
-      item.otherPaidAmount = 0;
-    }else{
-      item.paymentStatus = 'other';
-      item.otherPaidAmount = paid;
-    }
-
-    item.receivableAmount = Math.max(0, fee - paid);
-
-    closeReceivableEdit();
-    renderReceivableSummary();
-    renderReceivablePage();
-    await saveToSheet();
-  });
-
-  document.getElementById('receivableEditModal').addEventListener('click', e=>{
-    if(e.target.id === 'receivableEditModal') closeReceivableEdit();
-  });
 
 </script>
 
-  <div id="receivableEditModal" class="modal-backdrop" style="display:none;">
-    <div class="modal-card" style="max-width:460px;">
-      <div class="modal-head">
-        <div>
-          <div class="modal-title">미수금 정보 수정</div>
-          <div id="receivableEditCompany" class="sub"></div>
-        </div>
-        <button type="button" class="icon-btn" id="receivableEditClose">×</button>
-      </div>
-      <div class="form-grid" style="margin-top:14px;">
-        <label>입금액
-          <input id="receivableEditPaid" class="money-input" type="number" min="0" step="1000" placeholder="0">
-        </label>
-      </div>
-      <div class="modal-actions" style="margin-top:18px;">
-        <button type="button" class="btn" id="receivableEditCancel">취소</button>
-        <button type="button" class="btn primary" id="receivableEditSave">저장</button>
-      </div>
-    </div>
-  </div>
 
 </body>
 </html>
