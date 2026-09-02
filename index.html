@@ -399,7 +399,7 @@
   }
 
 
-  .receivable-edit-btn{ margin-left:0; padding:4px 10px; font-size:12px; white-space:nowrap; }
+  .text-edit-btn{ margin-left:6px; padding:2px 7px; font-size:11px; white-space:nowrap; }
   #receivableEditModal.modal-backdrop{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999; background:rgba(0,0,0,.35); }
   #receivableEditModal .modal-card{ width:min(92vw,460px); box-sizing:border-box; }
 
@@ -1138,12 +1138,14 @@
         <td>${escapeHtml(item.name||'(이름 없음)')}</td>
         <td>${escapeHtml(item.plannedDate||'-')}</td>
         <td class="receivable-amount">${feeInput}</td>
-        <td class="receivable-amount">${formatWon(getPaidAmount(item))}</td>
+        <td class="receivable-amount">
+          ${formatWon(getPaidAmount(item))}
+          ${canEdit ? `<button type="button" class="text-edit-btn" data-receivable-edit="${item.id}">수정</button>` : ''}
+        </td>
         <td class="receivable-amount ${getReceivableAmount(item)>0?'receivable-overdue':''}">${formatWon(getReceivableAmount(item))}</td>
         <td style="text-align:center">${escapeHtml(paymentStatusText(status))}</td>
         <td>${dueInput}</td>
 <td class="${overdue?'receivable-overdue':''}">${receivableStatusText(item)}</td>
-        <td style="text-align:center">${canEdit ? `<button type="button" class="btn small receivable-edit-btn" data-receivable-edit="${item.id}">수정</button>` : '-'}</td>
       </tr>`;
     }).join('');
   }
@@ -1777,9 +1779,7 @@
     if(!item) return;
     receivableEditingId = id;
     document.getElementById('receivableEditCompany').textContent = item.name || '(이름 없음)';
-    document.getElementById('receivableEditFee').value = getExamFee(item) || '';
     document.getElementById('receivableEditPaid').value = getPaidAmount(item) || '';
-    document.getElementById('receivableEditDue').value = item.paymentDueDate || '';
     document.getElementById('receivableEditModal').style.display = 'flex';
   }
 
@@ -1802,16 +1802,10 @@
     const item = state.companies.find(c=>c.id===receivableEditingId);
     if(!item) return;
 
-    const fee = Math.max(0, Number(document.getElementById('receivableEditFee').value || 0));
     const paid = Math.max(0, Number(document.getElementById('receivableEditPaid').value || 0));
-    const due = document.getElementById('receivableEditDue').value || '';
+    const fee = Math.max(0, Number(getExamFee(item) || 0));
 
-    item.examFee = fee;
-    item.paymentDueDate = due;
-
-    // Direct 입금액 editing: choose the closest representation supported by
-    // the existing schema. If it matches 50/70/100%, store that status;
-    // otherwise store "other" and preserve the exact paid amount.
+    // 시험비와 입금 예정일은 그대로 두고, 입금액만 수정합니다.
     if(fee > 0 && paid === fee){
       item.paymentStatus = '100';
       item.otherPaidAmount = 0;
@@ -1850,14 +1844,8 @@
         <button type="button" class="icon-btn" id="receivableEditClose">×</button>
       </div>
       <div class="form-grid" style="margin-top:14px;">
-        <label>시험비
-          <input id="receivableEditFee" class="money-input" type="number" min="0" step="1000" placeholder="0">
-        </label>
         <label>입금액
           <input id="receivableEditPaid" class="money-input" type="number" min="0" step="1000" placeholder="0">
-        </label>
-        <label>입금 예정일
-          <input id="receivableEditDue" class="payment-due-input" type="date">
         </label>
       </div>
       <div class="modal-actions" style="margin-top:18px;">
