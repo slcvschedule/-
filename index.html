@@ -404,10 +404,15 @@
   #receivableEditModal .modal-card{ width:min(92vw,460px); box-sizing:border-box; }
 
 
-  .receivable-paid-input{width:100%;min-width:105px;box-sizing:border-box;}
-  .receivable-status-cell{min-width:150px;white-space:nowrap;}
+  .settlement-import-box table{width:100%;border-collapse:collapse;font-size:12px}
+  .settlement-import-box th,.settlement-import-box td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
+  .settlement-import-box .ok{font-weight:700}
+  .settlement-import-box .warn{font-weight:700}
+  .settlement-import-box .bad{font-weight:700}
+  .settlement-import-apply{margin-top:10px}
 
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="auth-overlay" id="authOverlay">
@@ -551,7 +556,19 @@
         <button type="button" class="receivable-filter" data-receivable-filter="other">기타</button>
       </div>
       <div style="overflow-x:auto">
-        <table id="receivableTable">
+        
+<div class="receivable-import-box" style="margin:12px 0 16px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#fff;">
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <strong>📥 정산 엑셀 불러오기</strong>
+    <input id="settlementFileInput" type="file" accept=".xlsx,.xls,.csv" style="display:none">
+    <button type="button" class="btn" id="settlementFileButton">엑셀 선택</button>
+    <span id="settlementFileName" style="font-size:12px;color:var(--ink-soft);">파일을 선택하세요.</span>
+  </div>
+  <div id="settlementImportResult" style="display:none;margin-top:10px;"></div>
+  <div id="settlementImportPreview" style="display:none;margin-top:10px;"></div>
+</div>
+
+<table id="receivableTable">
           <thead>
             <tr>
               <th style="width:18%">업체명</th>
@@ -1143,51 +1160,39 @@
         <td>${escapeHtml(item.plannedDate||'-')}</td>
         <td class="receivable-amount">${feeInput}</td>
         <td class="receivable-amount">
-          <input class="money-input receivable-paid-input" type="number" min="0" step="1000"
-                 value="${getPaidAmount(item)||''}" data-field="receivablePaid"
-                 placeholder="0" ${canEdit?'':'disabled'}>
+          ${formatWon(getPaidAmount(item))}
+          ${canEdit ? `<button type="button" class="text-edit-btn" data-receivable-edit="${item.id}">수정</button>` : ''}
         </td>
         <td class="receivable-amount ${getReceivableAmount(item)>0?'receivable-overdue':''}">${formatWon(getReceivableAmount(item))}</td>
         <td style="text-align:center">${escapeHtml(paymentStatusText(status))}</td>
         <td>${dueInput}</td>
-<td class="receivable-status-cell ${overdue?'receivable-overdue':''}">${receivableStatusText(item)}</td>
+<td class="${overdue?'receivable-overdue':''}">${receivableStatusText(item)}</td>
       </tr>`;
     }).join('');
   }
 
-  document.getElementById('receivableBody').addEventListener('change', async e=>{
+  document.getElementById('receivableBody').addEventListener('change', e=>{
     if(!canEdit) return;
-    const field = e.target.dataset.field;
-    if(field !== 'receivablePaid') return;
-
+    const field = e.target.dataset.receivableField;
+    if(!field) return;
     const tr = e.target.closest('tr[data-id]');
     if(!tr) return;
     const item = state.companies.find(c=>c.id===tr.dataset.id);
     if(!item) return;
 
-    const fee = Math.max(0, Number(getExamFee(item) || 0));
-    const paid = Math.max(0, Number(e.target.value || 0));
-
-    // 미수금 관리 화면에서는 입금액만 수정합니다.
-    // 시험비와 입금 예정일은 변경하지 않습니다.
-    if(fee > 0 && paid === fee){
-      item.paymentStatus = '100';
-      item.otherPaidAmount = 0;
-    }else if(fee > 0 && paid === fee * 0.7){
-      item.paymentStatus = '70';
-      item.otherPaidAmount = 0;
-    }else if(fee > 0 && paid === fee * 0.5){
-      item.paymentStatus = '50';
-      item.otherPaidAmount = 0;
-    }else{
-      item.paymentStatus = 'other';
-      item.otherPaidAmount = paid;
+    if(field === 'paymentStatus'){
+      item.paymentStatus = e.target.value || 'none';
+      if(item.paymentStatus !== 'other') item.otherPaidAmount = 0;
+    }else if(field === 'otherPaidAmount'){
+      item.otherPaidAmount = Math.max(0, Number(e.target.value || 0));
+    }else if(field === 'paymentDueDate'){
+      item.paymentDueDate = e.target.value || '';
     }
 
-    item.receivableAmount = Math.max(0, fee - paid);
+    item.receivableAmount = getReceivableAmount(item);
     renderReceivableSummary();
     renderReceivablePage();
-    await saveToSheet();
+    saveToSheet();
   });
 
   document.getElementById('receivableSearch').addEventListener('input',e=>{
@@ -1785,10 +1790,194 @@
 
 })();
 
+  let receivableEditingId = null;
 
+  function openReceivableEdit(id){
+    if(!canEdit) return;
+    const item = state.companies.find(c=>c.id===id);
+    if(!item) return;
+    receivableEditingId = id;
+    document.getElementById('receivableEditCompany').textContent = item.name || '(이름 없음)';
+    document.getElementById('receivableEditPaid').value = getPaidAmount(item) || '';
+    document.getElementById('receivableEditModal').style.display = 'flex';
+  }
+
+  function closeReceivableEdit(){
+    receivableEditingId = null;
+    document.getElementById('receivableEditModal').style.display = 'none';
+  }
+
+  document.getElementById('receivableBody').addEventListener('click', e=>{
+    const btn = e.target.closest('[data-receivable-edit]');
+    if(!btn) return;
+    openReceivableEdit(btn.dataset.receivableEdit);
+  });
+
+  document.getElementById('receivableEditClose').addEventListener('click', closeReceivableEdit);
+  document.getElementById('receivableEditCancel').addEventListener('click', closeReceivableEdit);
+
+  document.getElementById('receivableEditSave').addEventListener('click', async ()=>{
+    if(!canEdit || !receivableEditingId) return;
+    const item = state.companies.find(c=>c.id===receivableEditingId);
+    if(!item) return;
+
+    const paid = Math.max(0, Number(document.getElementById('receivableEditPaid').value || 0));
+    const fee = Math.max(0, Number(getExamFee(item) || 0));
+
+    // 이 창에서는 "입금액"만 수정합니다.
+    // 시험비와 입금 예정일은 절대 변경하지 않습니다.
+    if(fee > 0 && paid === fee){
+      item.paymentStatus = '100';
+      item.otherPaidAmount = 0;
+    }else if(fee > 0 && paid === fee * 0.7){
+      item.paymentStatus = '70';
+      item.otherPaidAmount = 0;
+    }else if(fee > 0 && paid === fee * 0.5){
+      item.paymentStatus = '50';
+      item.otherPaidAmount = 0;
+    }else{
+      item.paymentStatus = 'other';
+      item.otherPaidAmount = paid;
+    }
+
+    item.receivableAmount = Math.max(0, fee - paid);
+
+    closeReceivableEdit();
+    renderReceivableSummary();
+    renderReceivablePage();
+    await saveToSheet();
+  });
+
+  document.getElementById('receivableEditModal').addEventListener('click', e=>{
+    if(e.target.id === 'receivableEditModal') closeReceivableEdit();
+  });
+
+
+  // 정산 엑셀 자동 반영
+  let settlementImportMatches = [];
+
+  function settlementNorm(v){ return String(v ?? '').replace(/\s+/g,'').trim().toLowerCase(); }
+  function settlementNum(v){
+    if(typeof v === 'number') return v;
+    const n=Number(String(v ?? '').replace(/[,\s₩원]/g,''));
+    return Number.isFinite(n)?n:0;
+  }
+  function settlementHeaderRow(rows){
+    for(let i=0;i<Math.min(rows.length,15);i++){
+      const line=(rows[i]||[]).map(v=>String(v??'').replace(/\s+/g,'')).join('|');
+      if(/업체|거래처|회사/.test(line) && /금액|거래/.test(line)) return i;
+    }
+    return 0;
+  }
+  function settlementPick(headers, regexes){
+    for(let i=0;i<headers.length;i++){
+      const h=String(headers[i]??'').replace(/\s+/g,'');
+      if(regexes.some(r=>r.test(h))) return i;
+    }
+    return -1;
+  }
+  function parseSettlementRows(rows){
+    const hi=settlementHeaderRow(rows), h=rows[hi]||[];
+    const nameCol=settlementPick(h,[/업체명/,/거래처/,/회사명/,/^업체$/]);
+    const tradeCol=settlementPick(h,[/거래금액/,/거래가액/,/매출금액/,/시험비/,/공급가액/]);
+    const paidCol=settlementPick(h,[/입금액/,/입금금액/,/수금액/,/수납액/]);
+    const dateCol=settlementPick(h,[/입금일/,/입금일자/,/수금일/,/수납일/]);
+    const statusCol=settlementPick(h,[/상태/,/구분/,/비고/]);
+    if(nameCol<0 || (tradeCol<0 && paidCol<0)) throw new Error('업체명과 거래금액/입금액 열을 찾지 못했습니다.');
+    const out=[];
+    for(let r=hi+1;r<rows.length;r++){
+      const row=rows[r]||[], name=String(row[nameCol]??'').trim();
+      if(!name) continue;
+      const trade=tradeCol>=0?settlementNum(row[tradeCol]):0;
+      const paid=paidCol>=0?settlementNum(row[paidCol]):0;
+      const date=dateCol>=0?String(row[dateCol]??'').trim():'';
+      const status=statusCol>=0?String(row[statusCol]??'').trim():'';
+      if(trade===0 && paid===0 && !date) continue;
+      out.push({name,trade,paid,date,status,row:r+1});
+    }
+    return out;
+  }
+  function matchSettlement(rows){
+    return rows.map(s=>{
+      const candidates=state.companies.filter(c=>settlementNorm(c.name)===settlementNorm(s.name));
+      const exact=candidates.filter(c=>s.trade>0 && Math.abs(settlementNum(getExamFee(c))-s.trade)<1);
+      if(exact.length===1) return {...s,item:exact[0],result:'matched',reason:'업체명 + 거래금액 일치'};
+      if(candidates.length===1) return {...s,item:candidates[0],result:'matched',reason:'업체명 일치'};
+      if(exact.length>1) return {...s,item:null,result:'review',reason:'같은 업체/거래금액이 여러 건'};
+      if(candidates.length>1) return {...s,item:null,result:'review',reason:'같은 업체 일정이 여러 건'};
+      return {...s,item:null,result:'unmatched',reason:'사이트에서 업체를 찾지 못함'};
+    });
+  }
+  function renderSettlementPreview(){
+    const box=document.getElementById('settlementImportResult'), preview=document.getElementById('settlementImportPreview');
+    const m=settlementImportMatches.filter(x=>x.result==='matched').length;
+    const r=settlementImportMatches.filter(x=>x.result==='review').length;
+    const u=settlementImportMatches.filter(x=>x.result==='unmatched').length;
+    box.style.display='block';
+    box.innerHTML=`<span class="ok">자동 매칭 ${m}건</span> · <span class="warn">확인 필요 ${r}건</span> · <span class="bad">미매칭 ${u}건</span>`;
+    preview.style.display='block';
+    preview.innerHTML=`<div style="overflow:auto"><table><thead><tr><th>정산 업체</th><th>거래금액</th><th>입금액</th><th>매칭 업체</th><th>결과</th></tr></thead><tbody>${
+      settlementImportMatches.slice(0,100).map(x=>`<tr><td>${escapeHtml(x.name)}</td><td style="text-align:right">${formatWon(x.trade)}</td><td style="text-align:right">${formatWon(x.paid)}</td><td>${x.item?escapeHtml(x.item.name):'-'}</td><td>${x.result==='matched'?'자동 적용 가능':escapeHtml(x.reason)}</td></tr>`).join('')
+    }</tbody></table></div>${m?`<button type="button" class="btn primary settlement-import-apply" id="settlementApplyButton">✅ 매칭된 ${m}건 적용하기</button>`:''}`;
+    document.getElementById('settlementApplyButton')?.addEventListener('click',applySettlementImport);
+  }
+  async function applySettlementImport(){
+    if(!canEdit) return;
+    const targets=settlementImportMatches.filter(x=>x.result==='matched'&&x.item);
+    for(const x of targets){
+      const item=x.item, fee=Math.max(0,settlementNum(getExamFee(item))), paid=Math.max(0,settlementNum(x.paid));
+      // 입금액만 반영. 시험비/입금예정일은 변경하지 않음.
+      if(fee>0 && paid===fee){item.paymentStatus='100';item.otherPaidAmount=0;}
+      else if(fee>0 && paid===fee*0.7){item.paymentStatus='70';item.otherPaidAmount=0;}
+      else if(fee>0 && paid===fee*0.5){item.paymentStatus='50';item.otherPaidAmount=0;}
+      else {item.paymentStatus='other';item.otherPaidAmount=paid;}
+      item.receivableAmount=Math.max(0,fee-paid);
+    }
+    renderReceivableSummary(); renderReceivablePage(); await saveToSheet();
+    alert(`정산 파일의 ${targets.length}건을 입금액에 반영했습니다.`);
+  }
+  document.getElementById('settlementFileButton')?.addEventListener('click',()=>{
+    if(!canEdit){alert('관리자 계정으로 로그인해야 정산 파일을 적용할 수 있습니다.');return;}
+    document.getElementById('settlementFileInput')?.click();
+  });
+  document.getElementById('settlementFileInput')?.addEventListener('change',async e=>{
+    const file=e.target.files?.[0]; if(!file)return;
+    document.getElementById('settlementFileName').textContent=file.name;
+    try{
+      if(typeof XLSX==='undefined')throw new Error('엑셀 읽기 모듈을 불러오지 못했습니다.');
+      const data=await file.arrayBuffer(), wb=XLSX.read(data,{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]], rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      settlementImportMatches=matchSettlement(parseSettlementRows(rows));
+      renderSettlementPreview();
+    }catch(err){
+      const box=document.getElementById('settlementImportResult');
+      box.style.display='block'; box.innerHTML=`<span class="bad">❌ ${escapeHtml(err.message||String(err))}</span>`;
+      document.getElementById('settlementImportPreview').style.display='none';
+    }finally{e.target.value='';}
+  });
 
 </script>
 
+  <div id="receivableEditModal" class="modal-backdrop" style="display:none;">
+    <div class="modal-card" style="max-width:460px;">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">미수금 정보 수정</div>
+          <div id="receivableEditCompany" class="sub"></div>
+        </div>
+        <button type="button" class="icon-btn" id="receivableEditClose">×</button>
+      </div>
+      <div class="form-grid" style="margin-top:14px;">
+        <label>입금액
+          <input id="receivableEditPaid" class="money-input" type="number" min="0" step="1000" placeholder="0">
+        </label>
+      </div>
+      <div class="modal-actions" style="margin-top:18px;">
+        <button type="button" class="btn" id="receivableEditCancel">취소</button>
+        <button type="button" class="btn primary" id="receivableEditSave">저장</button>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>
