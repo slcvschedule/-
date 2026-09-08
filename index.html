@@ -1165,6 +1165,16 @@
   function getOtherPaidAmount(item){
     return Math.max(0, Number(item.otherPaidAmount||0));
   }
+  // 저장되어 있는 paymentStatus가 오래된 값으로 남아 있어도, 실제 입금액을 기준으로 현재 진행률을 표시합니다.
+  function getDerivedPaymentStatus(item){
+    const fee=getExamFee(item);
+    const paid=getPaidAmount(item);
+    if(fee<=0 || paid<=0) return 'none';
+    if(Math.abs(paid-fee)<0.01) return '100';
+    if(Math.abs(paid-fee*0.7)<0.01) return '70';
+    if(Math.abs(paid-fee*0.5)<0.01) return '50';
+    return 'other';
+  }
   function getReceivableAmount(item){
     const fee=getExamFee(item);
     // 기존 버전에서 입력한 미수금 데이터는 새 시험비 데이터가 없는 경우 그대로 표시합니다.
@@ -1183,7 +1193,7 @@
   function receivableStatusText(item){
     if(!isReceivable(item)) return '<span class="receivable-paid">입금완료/미수금 없음</span>';
     if(isOverdue(item)) return '<span class="receivable-overdue">⚠ 입금 예정일 지남</span>';
-    if(item.paymentStatus === '100') return '<span class="receivable-paid">✓ 100% 입금완료</span>';
+    if(getDerivedPaymentStatus(item) === '100') return '<span class="receivable-paid">✓ 100% 입금완료</span>';
     if(item.paymentDueDate) return `<span>입금예정 ${escapeHtml(item.paymentDueDate)}</span>`;
     return '<span>미수금</span>';
   }
@@ -1198,7 +1208,7 @@
       else if(receivableFilter==='overdue') filterMatch=isOverdue(item);
       else if(receivableFilter==='dueSoon') filterMatch=isReceivable(item) && !!item.paymentDueDate && item.paymentDueDate>=todayYmd();
       else if(receivableFilter==='completed') filterMatch=item.paymentStatus==='100' || !isReceivable(item);
-      else if(['50','70','100','other'].includes(receivableFilter)) filterMatch=item.paymentStatus===receivableFilter;
+      else if(['50','70','100','other'].includes(receivableFilter)) filterMatch=getDerivedPaymentStatus(item)===receivableFilter;
       return nameMatch && filterMatch;
     });
   }
@@ -1209,7 +1219,7 @@
     const total=visible.reduce((sum,c)=>sum+getReceivableAmount(c),0);
     const overdue=receivables.filter(isOverdue).length;
     const dueSoon=receivables.filter(c=>c.paymentDueDate && c.paymentDueDate>=todayYmd()).length;
-    const completed=eligible.filter(c=>c.paymentStatus==='100' || !isReceivable(c)).length;
+    const completed=eligible.filter(c=>getDerivedPaymentStatus(c)==='100' || !isReceivable(c)).length;
     const active=(f)=>receivableFilter===f?' active':'';
     document.getElementById('receivableSummary').innerHTML=`
       <div class="receivable-stat money${active('all')}" data-summary-filter="all" title="전체 업체 보기"><div class="stat-num">${formatWon(total)}</div><div class="stat-label">현재 미수금 총액</div></div>
@@ -1237,7 +1247,7 @@
     }
     body.innerHTML=rows.map(item=>{
       const overdue=isOverdue(item);
-      const status=item.paymentStatus||'none';
+      const status=getDerivedPaymentStatus(item);
       const statusOptions = ['50','70','100','other','none'];
       const statusLabels = {'50':'50%','70':'70%','100':'100%','other':'기타','none':'미입력'};
       const statusSelect = `<select class="field receivable-edit" data-receivable-field="paymentStatus" ${canEdit?'':'disabled'}>
@@ -1280,7 +1290,10 @@
 
     // 미수금 관리 화면에서는 입금액만 수정합니다.
     // 시험비와 입금 예정일은 변경하지 않습니다.
-    if(fee > 0 && paid === fee){
+    if(fee > 0 && paid <= 0){
+      item.paymentStatus = 'none';
+      item.otherPaidAmount = 0;
+    }else if(fee > 0 && paid === fee){
       item.paymentStatus = '100';
       item.otherPaidAmount = 0;
     }else if(fee > 0 && paid === fee * 0.7){
