@@ -1504,8 +1504,30 @@
   }
   function isDepositAlreadyProcessed(row){
     const key=depositHistoryKey(row);
-    if(!key.endsWith('|')) return false;
-    return Array.isArray(state.depositHistory) && state.depositHistory.some(h=>h.key===key);
+    if(key.endsWith('|')) return false;
+    return Array.isArray(state.depositHistory) && state.depositHistory.some(h=>h && h.key===key);
+  }
+  function getDepositHistoryRecord(row){
+    const key=depositHistoryKey(row);
+    if(key.endsWith('|') || !Array.isArray(state.depositHistory)) return null;
+    return state.depositHistory.find(h=>h && h.key===key) || null;
+  }
+  function recordProcessedDeposit(row, item){
+    const key=depositHistoryKey(row);
+    if(key.endsWith('|')) return false;
+    if(!Array.isArray(state.depositHistory)) state.depositHistory=[];
+    if(state.depositHistory.some(h=>h && h.key===key)) return false;
+    state.depositHistory.push({
+      key,
+      date: normalizeDepositDate(row.date),
+      company: String(row.company||''),
+      item: String(row.item||''),
+      amount: Number(row.amount||0),
+      matchedCompany: String(item?.name||''),
+      matchedCompanyId: item?.id ? String(item.id) : '',
+      testType: String(item?.testType||detectTestType(row.item)||'')
+    });
+    return true;
   }
   function applyPaidAmount(item, paid){
     const fee=getExamFee(item);
@@ -1601,17 +1623,33 @@
           const date=dateIdx>=0?normalizeDepositDate(r[dateIdx]):'';
           const depositRow={company,item,amount,date};
           const duplicate=isDepositAlreadyProcessed(depositRow);
+          const historyRecord=getDepositHistoryRecord(depositRow);
           const match=candidateForDeposit(depositRow);
-          if(duplicate && match){
-            match.reason='이미 처리된 입금내역입니다 · 같은 업체/시험구분/금액/입금일';
-            match.duplicate=true;
+          if(duplicate){
+            if(match){
+              match.reason='이미 처리된 입금내역입니다 · 같은 업체/시험구분/금액/입금일';
+              match.duplicate=true;
+              if(historyRecord?.matchedCompany) match.item=state.companies.find(c=>String(c.id)===String(historyRecord.matchedCompanyId)) || match.item;
+            } else {
+              rows.push({id:`dep-${Date.now()}-${idx}-${Math.random().toString(36).slice(2,7)}`,company,item,amount,date,match:{item:null,confidence:'bad',reason:'이미 처리된 입금내역입니다 · 같은 업체/시험구분/금액/입금일',duplicate:true},duplicate:true,selected:false});
+              return;
+            }
           } else if(!date && match){
             match.reason += ' · 입금일이 없어 기존 처리내역과 중복 여부를 확인할 수 없음';
             match.noDate=true;
           }
           rows.push({id:`dep-${Date.now()}-${idx}-${Math.random().toString(36).slice(2,7)}`,company,item,amount,date,match,duplicate,selected:!!(match&&match.confidence==='ok'&&match.item&&!duplicate)});
         });
-        depositMatchRows=rows;
+        // 같은 파일 안에서 동일한 입금내역이 반복된 경우도 두 번 처리되지 않도록 합니다.
+        const seenInFile=new Set();
+        depositMatchRows=rows.map(r=>{
+          const key=depositHistoryKey(r);
+          if(!key.endsWith('|') && seenInFile.has(key)){
+            r.duplicate=true; r.selected=false;
+            if(r.match){ r.match.duplicate=true; r.match.reason='파일 안에 동일한 입금내역이 중복되어 있습니다 · 한 건만 처리됩니다'; }
+          } else if(!key.endsWith('|')) seenInFile.add(key);
+          return r;
+        });
         renderDepositMatches();
       }catch(err){
         console.error(err); alert('파일 분석 중 오류가 발생했습니다.\n'+(err.message||err));
@@ -1654,8 +1692,11 @@
     let applied=0;
     selected.forEach(r=>{
       const item=r.match.item;
+      if(r.duplicate) { r.selected=false; return; }
       const before=getCurrentPaid(item);
-      if(applyPaidAmount(item,before+r.amount)) applied++;
+      if(applyPaidAmount(item,before+r.amount)){
+        if(recordProcessedDeposit(r,item)) applied++;
+      }
       r.selected=false;
     });
     renderAll();
