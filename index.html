@@ -419,6 +419,27 @@
   #receivableEditModal.modal-backdrop{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:9999; background:rgba(0,0,0,.35); }
   #receivableEditModal .modal-card{ width:min(92vw,460px); box-sizing:border-box; }
 
+  /* ---------- Deposit matching ---------- */
+  #depositMatchOverlay .modal{max-width:1050px;width:96vw;}
+  .deposit-upload{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px;background:#F7F8F7;border:1px solid var(--line);border-radius:7px;margin-bottom:12px;}
+  .deposit-upload input[type=file]{max-width:100%;font-size:12px;}
+  .match-summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .match-stat{padding:8px 11px;border:1px solid var(--line);border-radius:6px;background:#fff;font-size:12px;}
+  .match-stat b{font-family:'IBM Plex Mono',monospace;}
+  .match-table-wrap{overflow:auto;max-height:52vh;border:1px solid var(--line);border-radius:7px;}
+  .match-table{min-width:900px;}
+  .match-table th{position:sticky;top:0;background:#F7F8F7;z-index:1;}
+  .match-ok{color:var(--accent);font-weight:600;}
+  .match-warn{color:var(--pending);font-weight:600;}
+  .match-bad{color:var(--danger);font-weight:600;}
+  .match-check{width:16px;height:16px;accent-color:var(--accent);}
+  .match-reason{font-size:10.5px;color:var(--ink-soft);line-height:1.35;}
+  .match-company{font-weight:600;}
+  .match-type{font-family:'IBM Plex Mono',monospace;font-weight:600;}
+  .match-amount{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
+  .match-empty{padding:28px;text-align:center;color:var(--ink-soft);}
+  .match-help{font-size:11px;color:var(--ink-soft);line-height:1.5;margin-top:8px;}
+
 
   .receivable-paid-input{width:100%;min-width:105px;box-sizing:border-box;}
   .receivable-status-cell{min-width:150px;white-space:nowrap;}
@@ -554,6 +575,7 @@
           <h2>💰 미수금 관리</h2>
           <div class="sub">업체별 시험비, 입금액, 현재 미수금과 입금 예정일을 한눈에 확인합니다.</div>
         </div>
+        <button class="primary" id="btnDepositMatch">📥 입금내역 자동 매칭</button>
       </div>
       <div class="receivable-page-summary" id="receivableSummary"></div>
       <div class="receivable-filterbar">
@@ -722,6 +744,28 @@
     </div>
     <div class="modal-footer">
       <button class="primary" id="holidayClose">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Deposit Matching Modal -->
+<div class="modal-overlay" id="depositMatchOverlay">
+  <div class="modal">
+    <h3>📥 입금내역 자동 매칭</h3>
+    <div class="modal-sub">엑셀/CSV 파일에서 업체명·품목·입금액을 읽어 현재 미수금과 비교합니다. 자동으로 확정하지 않고, <b>사용자가 한 번 확인한 뒤</b> 선택한 건만 입금 처리합니다.</div>
+    <div class="deposit-upload">
+      <input type="file" id="depositFile" accept=".xlsx,.xls,.csv">
+      <button type="button" id="btnAnalyzeDeposit" class="primary">파일 분석</button>
+      <button type="button" id="btnMatchSelectAll" class="ghost">추천 항목 전체 선택</button>
+    </div>
+    <div id="depositMatchSummary" class="match-summary"></div>
+    <div id="depositMatchTableWrap" class="match-table-wrap">
+      <div class="match-empty">입금내역 파일을 선택하고 <b>파일 분석</b>을 눌러주세요.</div>
+    </div>
+    <div class="match-help">※ 품목명에 <b>Validation</b>이 있으면 V, <b>Revalidation</b>이 있으면 RV, <b>Monitoring</b>이 있으면 M으로 인식합니다. 업체명 + 시험구분 + 입금액을 우선 비교합니다. 애매한 건은 자동 선택하지 않습니다.</div>
+    <div class="modal-footer">
+      <button class="ghost" id="depositMatchClose">닫기</button>
+      <button class="primary" id="btnApplyDepositMatches" disabled>✓ 선택한 입금 처리</button>
     </div>
   </div>
 </div>
@@ -1383,6 +1427,182 @@
 
   document.getElementById('btnRefresh').addEventListener('click', loadFromSupabase);
   document.getElementById('btnSaveNow').addEventListener('click', saveNow);
+
+  // ---------- Deposit matching ----------
+  let depositMatchRows = [];
+
+  function normalizeCompanyName(value){
+    return String(value||'').toLowerCase()
+      .replace(/[\s\-_.()（）㈜]/g,'')
+      .replace(/주식회사|주\(\)|유한회사|유한책임회사|incorporated|inc\.|corp\.|corporation|co\.,?ltd\.?|ltd\./g,'');
+  }
+  function detectTestType(value){
+    const v=String(value||'').toLowerCase();
+    if(/re\s*[- ]?validation|revalidation|재밸리데이션|재검증/.test(v)) return 'RV';
+    if(/validation|밸리데이션|검증/.test(v)) return 'V';
+    if(/monitoring|모니터링/.test(v)) return 'M';
+    const m=v.match(/^\s*(rv|v|m)\b/i);
+    return m ? m[1].toUpperCase() : '';
+  }
+  function parseMoney(value){
+    if(value===null || value===undefined || value==='') return null;
+    if(typeof value==='number') return Number.isFinite(value)?value:null;
+    const n=Number(String(value).replace(/[^0-9.\-]/g,''));
+    return Number.isFinite(n)?n:null;
+  }
+  function findHeader(headers, candidates){
+    const hs=headers.map(h=>String(h||'').trim().toLowerCase());
+    for(const c of candidates){
+      const i=hs.indexOf(c.toLowerCase()); if(i>=0) return i;
+    }
+    for(let i=0;i<hs.length;i++) if(candidates.some(c=>hs[i].includes(c.toLowerCase()))) return i;
+    return -1;
+  }
+  function getCurrentPaid(item){ return getPaidAmount(item); }
+  function applyPaidAmount(item, paid){
+    const fee=getExamFee(item);
+    const safe=Math.max(0,Number(paid||0));
+    if(fee<=0) return false;
+    const capped=Math.min(fee,safe);
+    if(Math.abs(capped-fee)<0.01){ item.paymentStatus='100'; item.otherPaidAmount=0; }
+    else if(Math.abs(capped-fee*0.7)<0.01){ item.paymentStatus='70'; item.otherPaidAmount=0; }
+    else if(Math.abs(capped-fee*0.5)<0.01){ item.paymentStatus='50'; item.otherPaidAmount=0; }
+    else { item.paymentStatus='other'; item.otherPaidAmount=capped; }
+    item.receivableAmount=Math.max(0,fee-capped);
+    return true;
+  }
+  function candidateForDeposit(row){
+    const payer=normalizeCompanyName(row.company);
+    const type=detectTestType(row.item);
+    const amount=Math.max(0,Number(row.amount||0));
+    if(!payer || amount<=0) return null;
+    const candidates=[];
+    state.companies.forEach(item=>{
+      const cn=normalizeCompanyName(item.name);
+      if(!cn) return;
+      const nameExact=cn===payer;
+      const namePartial=cn.includes(payer)||payer.includes(cn);
+      if(!nameExact && !namePartial) return;
+      const itemType=item.testType||'';
+      const typeMatch=!!type && itemType===type;
+      const typeUnknown=!type;
+      const remaining=Math.max(0,getExamFee(item)-getCurrentPaid(item));
+      const amountExact=remaining>0 && Math.abs(amount-remaining)<0.01;
+      const amountFits=remaining>0 && amount<=remaining;
+      let score=0;
+      if(nameExact) score+=50; else score+=30;
+      if(typeMatch) score+=35; else if(typeUnknown) score+=8;
+      if(amountExact) score+=15; else if(amountFits) score+=7;
+      if(getExamFee(item)<=0) score-=20;
+      candidates.push({item,score,nameExact,typeMatch,amountExact,amountFits,remaining});
+    });
+    candidates.sort((a,b)=>b.score-a.score);
+    if(!candidates.length) return {item:null,confidence:'bad',reason:'일치하는 업체 없음'};
+    const best=candidates[0], second=candidates[1];
+    const strong=best.nameExact && best.typeMatch && best.amountExact;
+    const good=best.nameExact && best.typeMatch && (best.amountFits || best.amountExact);
+    const ambiguous=second && (best.score-second.score)<15;
+    if(ambiguous) return {item:null,confidence:'warn',reason:'후보가 여러 건이라 직접 확인 필요',candidates:candidates.slice(0,3)};
+    return {
+      item:best.item,
+      confidence:strong?'ok':(good?'ok':'warn'),
+      reason:`업체명 ${best.nameExact?'일치':'유사'} · 시험구분 ${best.typeMatch?'일치':'확인 필요'} · 금액 ${best.amountExact?'잔액과 일치':(best.amountFits?'잔액 이내':'확인 필요')}`,
+      remaining:best.remaining
+    };
+  }
+
+  function openDepositMatch(){
+    if(!ensureEditor()) return;
+    depositMatchRows=[];
+    document.getElementById('depositFile').value='';
+    document.getElementById('depositMatchSummary').innerHTML='';
+    document.getElementById('depositMatchTableWrap').innerHTML='<div class="match-empty">입금내역 파일을 선택하고 <b>파일 분석</b>을 눌러주세요.</div>';
+    document.getElementById('btnApplyDepositMatches').disabled=true;
+    document.getElementById('depositMatchOverlay').classList.add('open');
+  }
+  document.getElementById('btnDepositMatch').addEventListener('click',openDepositMatch);
+  document.getElementById('depositMatchClose').addEventListener('click',()=>document.getElementById('depositMatchOverlay').classList.remove('open'));
+  document.getElementById('depositMatchOverlay').addEventListener('click',e=>{if(e.target.id==='depositMatchOverlay') e.currentTarget.classList.remove('open');});
+
+  document.getElementById('btnAnalyzeDeposit').addEventListener('click',()=>{
+    const file=document.getElementById('depositFile').files[0];
+    if(!file){ alert('입금내역 엑셀/CSV 파일을 선택해주세요.'); return; }
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+        const headerIndex=raw.findIndex(r=>r.some(v=>['업체명','거래처','입금자명','품목명','입금액','입금금액','거래금액'].includes(String(v||'').trim())));
+        if(headerIndex<0) throw new Error('업체명/입금액 등의 열을 찾지 못했습니다.');
+        const headers=raw[headerIndex];
+        const companyIdx=findHeader(headers,['업체명','거래처','입금자명','상호명','거래처명']);
+        const itemIdx=findHeader(headers,['품목명','품목','시험항목','적요','거래내용','내용']);
+        let amountIdx=findHeader(headers,['입금액','입금금액','입금','입금액(원)']);
+        const transIdx=findHeader(headers,['거래금액','거래금액(원)','금액']);
+        if(companyIdx<0) throw new Error('업체명/입금자명 열을 찾지 못했습니다.');
+        if(amountIdx<0) amountIdx=transIdx;
+        if(amountIdx<0) throw new Error('입금액/거래금액 열을 찾지 못했습니다.');
+        const dateIdx=findHeader(headers,['날짜','입금일','거래일자','거래일','일자']);
+        const rows=[];
+        raw.slice(headerIndex+1).forEach((r,idx)=>{
+          const company=String(r[companyIdx]??'').trim();
+          const item=itemIdx>=0?String(r[itemIdx]??'').trim():'';
+          const amount=parseMoney(r[amountIdx]);
+          if(!company || amount===null || amount<=0) return;
+          const match=candidateForDeposit({company,item,amount});
+          rows.push({id:`dep-${Date.now()}-${idx}-${Math.random().toString(36).slice(2,7)}`,company,item,amount,date:dateIdx>=0?r[dateIdx]:'',match,selected:!!(match&&match.confidence==='ok'&&match.item)});
+        });
+        depositMatchRows=rows;
+        renderDepositMatches();
+      }catch(err){
+        console.error(err); alert('파일 분석 중 오류가 발생했습니다.\n'+(err.message||err));
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  function renderDepositMatches(){
+    const summary=document.getElementById('depositMatchSummary');
+    const wrap=document.getElementById('depositMatchTableWrap');
+    const ok=depositMatchRows.filter(r=>r.match?.confidence==='ok'&&r.match.item).length;
+    const warn=depositMatchRows.filter(r=>r.match?.confidence==='warn').length;
+    const bad=depositMatchRows.length-ok-warn;
+    summary.innerHTML=`<div class="match-stat">읽은 입금건 <b>${depositMatchRows.length}</b>건</div><div class="match-stat match-ok">자동 매칭 추천 <b>${ok}</b>건</div><div class="match-stat match-warn">확인 필요 <b>${warn}</b>건</div><div class="match-stat match-bad">미매칭 <b>${bad}</b>건</div>`;
+    if(!depositMatchRows.length){ wrap.innerHTML='<div class="match-empty">입금액이 0원 이하인 행을 제외하면 읽을 입금내역이 없습니다.</div>'; document.getElementById('btnApplyDepositMatches').disabled=true; return; }
+    wrap.innerHTML=`<table class="match-table"><thead><tr><th style="width:36px">✓</th><th>입금일</th><th>파일 업체명/입금자명</th><th>품목</th><th style="text-align:right">입금액</th><th>매칭 업체</th><th>사이트 시험구분</th><th style="text-align:right">현재 미수금</th><th>판정</th></tr></thead><tbody>${depositMatchRows.map((r,i)=>{
+      const m=r.match; const item=m?.item; const confidence=m?.confidence||'bad';
+      const cls=confidence==='ok'?'match-ok':confidence==='warn'?'match-warn':'match-bad';
+      const checked=r.selected?'checked':'';
+      return `<tr><td><input class="match-check" type="checkbox" data-match-index="${i}" ${checked} ${item?'':'disabled'}></td><td>${escapeHtml(String(r.date||'-'))}</td><td class="match-company">${escapeHtml(r.company)}</td><td class="match-type">${escapeHtml(r.item||'-')}<div class="match-reason">${escapeHtml(detectTestType(r.item)?'인식: '+detectTestType(r.item):'시험구분 미인식')}</div></td><td class="match-amount">${formatWon(r.amount)}</td><td>${item?escapeHtml(item.name):'-'}</td><td class="match-type">${item?escapeHtml(item.testType):'-'}</td><td class="match-amount">${item?formatWon(getReceivableAmount(item)):'-'}</td><td class="${cls}">${confidence==='ok'?'✓ 추천':confidence==='warn'?'⚠ 확인 필요':'✕ 미매칭'}<div class="match-reason">${escapeHtml(m?.reason||'')}</div></td></tr>`;
+    }).join('')}</tbody></table>`;
+    wrap.querySelectorAll('.match-check').forEach(cb=>cb.addEventListener('change',e=>{depositMatchRows[Number(e.target.dataset.matchIndex)].selected=e.target.checked; updateApplyButton();}));
+    updateApplyButton();
+  }
+  function updateApplyButton(){
+    const count=depositMatchRows.filter(r=>r.selected&&r.match?.item).length;
+    const btn=document.getElementById('btnApplyDepositMatches'); btn.disabled=count===0; btn.textContent=count?`✓ 선택한 입금 처리 (${count}건)`:'✓ 선택한 입금 처리';
+  }
+  document.getElementById('btnMatchSelectAll').addEventListener('click',()=>{
+    depositMatchRows.forEach(r=>{r.selected=!!(r.match?.confidence==='ok'&&r.match.item);}); renderDepositMatches();
+  });
+  document.getElementById('btnApplyDepositMatches').addEventListener('click',async()=>{
+    if(!ensureEditor()) return;
+    const selected=depositMatchRows.filter(r=>r.selected&&r.match?.item);
+    if(!selected.length) return;
+    const detail=selected.map(r=>`${r.match.item.name} / ${r.match.item.testType} / ${formatWon(r.amount)}`).join('\n');
+    if(!confirm(`다음 ${selected.length}건을 입금 처리할까요?\n\n${detail}\n\n※ 확인 후 미수금이 자동으로 갱신됩니다.`)) return;
+    let applied=0;
+    selected.forEach(r=>{
+      const item=r.match.item;
+      const before=getCurrentPaid(item);
+      if(applyPaidAmount(item,before+r.amount)) applied++;
+      r.selected=false;
+    });
+    renderAll();
+    saveToSheet(`입금 ${applied}건을 처리했습니다`);
+    renderDepositMatches();
+  });
 
   // ---------- Backup (백업) ----------
   const backupOverlay = document.getElementById('backupOverlay');
