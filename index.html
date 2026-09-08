@@ -159,7 +159,9 @@
   .payment-check.selected{ color:var(--accent); font-weight:600; }
   .payment-due-input{ min-width:125px; }
   .receivable-page-summary{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:14px; }
-  .receivable-stat{ background:#F7F8F7; border:1px solid var(--line); border-radius:8px; padding:13px 14px; }
+  .receivable-stat{ background:#F7F8F7; border:1px solid var(--line); border-radius:8px; padding:13px 14px; cursor:pointer; transition:.15s; }
+  .receivable-stat:hover{ border-color:var(--ink-soft); transform:translateY(-1px); }
+  .receivable-stat.active{ background:#fff; border-color:var(--ink); box-shadow:0 0 0 1px var(--ink) inset; }
   .receivable-stat .stat-num{ font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:600; line-height:1.15; }
   .receivable-stat .stat-label{ font-size:11px; color:var(--ink-soft); margin-top:5px; }
   .receivable-stat.warning .stat-num{ color:var(--danger); }
@@ -581,8 +583,6 @@
       <div class="receivable-filterbar">
         <input id="receivableSearch" type="text" placeholder="업체명으로 검색" autocomplete="off">
         <button type="button" class="receivable-filter active" data-receivable-filter="all">전체</button>
-        <button type="button" class="receivable-filter" data-receivable-filter="receivable">미수 업체</button>
-        <button type="button" class="receivable-filter" data-receivable-filter="overdue">예정일 지남</button>
         <button type="button" class="receivable-filter" data-receivable-filter="50">50%</button>
         <button type="button" class="receivable-filter" data-receivable-filter="70">70%</button>
         <button type="button" class="receivable-filter" data-receivable-filter="100">100%</button>
@@ -605,7 +605,7 @@
           <tbody id="receivableBody"></tbody>
         </table>
       </div>
-      <div class="receivable-note">※ 시험비를 입력하면 50% / 70% / 100% 선택 시 입금액과 미수금이 자동 계산됩니다. <b>기타</b>를 선택하면 실제 입금액을 직접 입력할 수 있습니다. 입금 예정일이 오늘보다 이전이고 미수금이 있으면 <b>예정일 지남</b>으로 표시됩니다.</div>
+      <div class="receivable-note">※ 시험비와 시험 예정일이 등록된 업체만 표시됩니다. 시험비를 입력하면 50% / 70% / 100% 선택 시 입금액과 미수금이 자동 계산됩니다. <b>기타</b>를 선택하면 실제 입금액을 직접 입력할 수 있습니다. 입금 예정일이 오늘보다 이전이고 미수금이 있으면 <b>예정일 지남</b>으로 표시됩니다.</div>
     </section>
   </div>
 </div>
@@ -1169,7 +1169,11 @@
     if(fee<=0 && Number(item.receivableAmount||0)>0 && String(item.paymentStatus||'none')==='none') return Math.max(0, Number(item.receivableAmount||0));
     return Math.max(0, fee-getPaidAmount(item));
   }
-  function isReceivable(item){ return getReceivableAmount(item) > 0; }
+  // 미수금 관리 화면에 표시할 기본 대상: 시험비가 입력되어 있고 시험 예정일이 등록된 업체만 표시합니다.
+  function isReceivableEligible(item){
+    return getExamFee(item) > 0 && !!String(item.plannedDate||'').trim();
+  }
+  function isReceivable(item){ return isReceivableEligible(item) && getReceivableAmount(item) > 0; }
   function isOverdue(item){ return isReceivable(item) && !!item.paymentDueDate && item.paymentDueDate < todayYmd(); }
   function paymentStatusText(status){
     return ({'50':'50%','70':'70%','100':'100%','other':'기타','none':'미입력'})[status] || '미입력';
@@ -1184,26 +1188,42 @@
   function getReceivableCompanies(){
     const q=receivableSearch.trim().toLowerCase();
     return state.companies.filter(item=>{
+      // 시험비 미입력 또는 시험 예정일 미등록 업체는 미수금 화면에서 제외
+      if(!isReceivableEligible(item)) return false;
       const nameMatch=!q || String(item.name||'').toLowerCase().includes(q);
       let filterMatch=true;
       if(receivableFilter==='receivable') filterMatch=isReceivable(item);
       else if(receivableFilter==='overdue') filterMatch=isOverdue(item);
+      else if(receivableFilter==='dueSoon') filterMatch=isReceivable(item) && !!item.paymentDueDate && item.paymentDueDate>=todayYmd();
+      else if(receivableFilter==='completed') filterMatch=item.paymentStatus==='100' || !isReceivable(item);
       else if(['50','70','100','other'].includes(receivableFilter)) filterMatch=item.paymentStatus===receivableFilter;
       return nameMatch && filterMatch;
     });
   }
   function renderReceivableSummary(){
-    const receivables=state.companies.filter(isReceivable);
-    const total=receivables.reduce((sum,c)=>sum+getReceivableAmount(c),0);
+    const eligible=state.companies.filter(isReceivableEligible);
+    const receivables=eligible.filter(isReceivable);
+    const visible=getReceivableCompanies();
+    const total=visible.reduce((sum,c)=>sum+getReceivableAmount(c),0);
     const overdue=receivables.filter(isOverdue).length;
     const dueSoon=receivables.filter(c=>c.paymentDueDate && c.paymentDueDate>=todayYmd()).length;
-    const completed=state.companies.filter(c=>c.paymentStatus==='100' || !isReceivable(c)).length;
+    const completed=eligible.filter(c=>c.paymentStatus==='100' || !isReceivable(c)).length;
+    const active=(f)=>receivableFilter===f?' active':'';
     document.getElementById('receivableSummary').innerHTML=`
-      <div class="receivable-stat money"><div class="stat-num">${formatWon(total)}</div><div class="stat-label">미수금 총액</div></div>
-      <div class="receivable-stat"><div class="stat-num">${receivables.length}개</div><div class="stat-label">미수 업체 수</div></div>
-      <div class="receivable-stat warning"><div class="stat-num">${overdue}개</div><div class="stat-label">예정일 지난 업체</div></div>
-      <div class="receivable-stat"><div class="stat-num">${dueSoon}개</div><div class="stat-label">입금 예정 업체</div></div>
-      <div class="receivable-stat"><div class="stat-num">${completed}개</div><div class="stat-label">입금완료/미수금 없음</div></div>`;
+      <div class="receivable-stat money${active('all')}" data-summary-filter="all" title="전체 업체 보기"><div class="stat-num">${formatWon(total)}</div><div class="stat-label">현재 미수금 총액</div></div>
+      <div class="receivable-stat${active('receivable')}" data-summary-filter="receivable" title="미수 업체만 보기"><div class="stat-num">${receivables.length}개</div><div class="stat-label">미수 업체 수</div></div>
+      <div class="receivable-stat warning${active('overdue')}" data-summary-filter="overdue" title="예정일이 지난 업체만 보기"><div class="stat-num">${overdue}개</div><div class="stat-label">예정일 지난 업체</div></div>
+      <div class="receivable-stat${active('dueSoon')}" data-summary-filter="dueSoon" title="입금 예정 업체 보기"><div class="stat-num">${dueSoon}개</div><div class="stat-label">입금 예정 업체</div></div>
+      <div class="receivable-stat${active('completed')}" data-summary-filter="completed" title="입금완료/미수금 없음 보기"><div class="stat-num">${completed}개</div><div class="stat-label">입금완료/미수금 없음</div></div>`;
+    document.querySelectorAll('[data-summary-filter]').forEach(card=>{
+      card.addEventListener('click',()=>{
+        const f=card.dataset.summaryFilter||'all';
+        receivableFilter=f;
+        document.querySelectorAll('[data-receivable-filter]').forEach(b=>b.classList.toggle('active',b.dataset.receivableFilter===f));
+        renderReceivableSummary();
+        renderReceivablePage();
+      });
+    });
   }
   function renderReceivablePage(){
     const body=document.getElementById('receivableBody');
@@ -1280,12 +1300,14 @@
 
   document.getElementById('receivableSearch').addEventListener('input',e=>{
     receivableSearch=e.target.value;
+    renderReceivableSummary();
     renderReceivablePage();
   });
   document.querySelectorAll('[data-receivable-filter]').forEach(btn=>{
     btn.addEventListener('click',()=>{
       receivableFilter=btn.dataset.receivableFilter||'all';
       document.querySelectorAll('[data-receivable-filter]').forEach(b=>b.classList.toggle('active',b===btn));
+      renderReceivableSummary();
       renderReceivablePage();
     });
   });
