@@ -1074,6 +1074,11 @@
     if(status==='70') return Math.min(fee, fee*0.7);
     if(status==='100') return fee;
     if(status==='other') return Math.min(fee, Math.max(0, Number(item.otherPaidAmount||0)));
+    // 기존에 저장된 미수금 데이터와의 호환: 입금 진행률이 none이어도
+    // 시험비와 미수금이 저장되어 있다면 그 차액을 기존 입금액으로 간주합니다.
+    if(fee>0 && Number(item.receivableAmount||0)>0){
+      return Math.max(0, fee - Number(item.receivableAmount||0));
+    }
     return 0;
   }
   function getOtherPaidAmount(item){
@@ -1097,14 +1102,19 @@
     if(item.paymentDueDate) return `<span>입금예정 ${escapeHtml(item.paymentDueDate)}</span>`;
     return '<span>미수금</span>';
   }
-  function hasPaidAmount(item){
-    return getPaidAmount(item) > 0;
+  function hasReceivableInfo(item){
+    const paid = getPaidAmount(item);
+    const receivable = getReceivableAmount(item);
+    const dueDate = String(item.paymentDueDate || '').trim();
+    const status = String(item.paymentStatus || 'none');
+    // 입금 관련 정보가 하나도 없는 업체만 미수금 관리 목록에서 제외합니다.
+    return paid > 0 || receivable > 0 || !!dueDate || ['50','70','100','other'].includes(status);
   }
   function getReceivableCompanies(){
     const q=receivableSearch.trim().toLowerCase();
     return state.companies.filter(item=>{
       // 입금액이 아직 입력되지 않은 업체는 미수금 관리 목록에서 제외
-      if(!hasPaidAmount(item)) return false;
+      if(!hasReceivableInfo(item)) return false;
       const nameMatch=!q || String(item.name||'').toLowerCase().includes(q);
       let filterMatch=true;
       if(receivableFilter==='receivable') filterMatch=isReceivable(item);
@@ -1114,7 +1124,7 @@
     });
   }
   function renderReceivableSummary(){
-    const receivables=state.companies.filter(item=>hasPaidAmount(item) && isReceivable(item));
+    const receivables=state.companies.filter(item=>hasReceivableInfo(item) && isReceivable(item));
     const total=receivables.reduce((sum,c)=>sum+getReceivableAmount(c),0);
     const overdue=receivables.filter(isOverdue).length;
     const dueSoon=receivables.filter(c=>c.paymentDueDate && c.paymentDueDate>=todayYmd()).length;
