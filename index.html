@@ -1097,9 +1097,14 @@
     if(item.paymentDueDate) return `<span>입금예정 ${escapeHtml(item.paymentDueDate)}</span>`;
     return '<span>미수금</span>';
   }
+  function hasPaidAmount(item){
+    return getPaidAmount(item) > 0;
+  }
   function getReceivableCompanies(){
     const q=receivableSearch.trim().toLowerCase();
     return state.companies.filter(item=>{
+      // 입금액이 아직 입력되지 않은 업체는 미수금 관리 목록에서 제외
+      if(!hasPaidAmount(item)) return false;
       const nameMatch=!q || String(item.name||'').toLowerCase().includes(q);
       let filterMatch=true;
       if(receivableFilter==='receivable') filterMatch=isReceivable(item);
@@ -1109,7 +1114,7 @@
     });
   }
   function renderReceivableSummary(){
-    const receivables=state.companies.filter(isReceivable);
+    const receivables=state.companies.filter(item=>hasPaidAmount(item) && isReceivable(item));
     const total=receivables.reduce((sum,c)=>sum+getReceivableAmount(c),0);
     const overdue=receivables.filter(isOverdue).length;
     const dueSoon=receivables.filter(c=>c.paymentDueDate && c.paymentDueDate>=todayYmd()).length;
