@@ -412,6 +412,20 @@
   .receivable-paid-input{width:100%;min-width:105px;box-sizing:border-box;}
   .receivable-status-cell{min-width:150px;white-space:nowrap;}
 
+
+  .receivable-register-modal{width:min(94vw,720px);max-height:90vh;overflow-y:auto;box-sizing:border-box;}
+  .mini-cal-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0 8px;}
+  .mini-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;}
+  .mini-cal-dow{text-align:center;font-size:11px;color:var(--ink-soft);padding:5px 0;font-weight:600;}
+  .mini-cal-day{min-height:70px;border:1px solid var(--line);border-radius:6px;padding:4px;background:#fff;min-width:0;}
+  .mini-cal-day.outside{background:#f7f7f7;color:#aaa;min-height:34px;}
+  .mini-cal-day.selected{outline:2px solid var(--accent);background:#f2f8f5;}
+  .mini-cal-num{font-size:11px;margin-bottom:3px;}
+  .mini-cal-event{display:block;width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;font-size:10px;line-height:1.25;padding:3px 4px;margin-top:3px;border-radius:4px;border:1px solid var(--line);background:#f5f7f6;color:var(--ink);}
+  .mini-cal-event.selected{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .receivable-selected-schedule{margin-top:10px;padding:9px 10px;border-radius:6px;background:#f7f8f7;font-size:12px;}
+  @media(max-width:600px){.mini-cal-day{min-height:48px;padding:2px}.mini-cal-event{font-size:9px;padding:2px}.receivable-register-modal{padding:16px;}}
+
 </style>
 </head>
 <body>
@@ -545,21 +559,9 @@
         </div>
       </div>
       <div class="receivable-page-summary" id="receivableSummary"></div>
-      <div class="receivable-register" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:14px 0;padding:12px;background:var(--panel-soft,#f7f8fa);border:1px solid var(--line);border-radius:10px">
-        <strong style="width:100%">미수금 업체 등록</strong>
-        <label style="flex:2;min-width:180px;font-size:12px">업체명
-          <input id="newReceivableName" type="text" placeholder="업체명 입력" style="width:100%;box-sizing:border-box">
-        </label>
-        <label style="flex:1;min-width:120px;font-size:12px">시험비 (원)
-          <input id="newReceivableFee" type="number" min="0" step="1000" placeholder="0" style="width:100%;box-sizing:border-box">
-        </label>
-        <label style="flex:1;min-width:120px;font-size:12px">미수금 (원)
-          <input id="newReceivableBalance" type="number" min="0" step="1000" placeholder="0" style="width:100%;box-sizing:border-box">
-        </label>
-        <label style="flex:1;min-width:145px;font-size:12px">입금 예정일
-          <input id="newReceivableDue" type="date" style="width:100%;box-sizing:border-box">
-        </label>
-        <button type="button" class="primary" id="addReceivableCompany">＋ 업체 등록</button>
+      <div class="receivable-register" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin:14px 0;padding:14px;background:var(--panel-soft,#f7f8fa);border:1px solid var(--line);border-radius:10px">
+        <div><strong>미수금 업체 등록</strong><div class="sub" style="margin-top:4px">월별 캘린더에서 해당 시험 일정을 선택한 뒤 시험비와 미수금을 입력하세요.</div></div>
+        <button type="button" class="primary" id="addReceivableCompany">＋ 일정 선택 후 등록</button>
       </div>
       <div class="receivable-filterbar">
         <input id="receivableSearch" type="text" placeholder="업체명으로 검색" autocomplete="off">
@@ -612,6 +614,33 @@
     <div class="modal-footer">
       <button class="ghost" id="memoCancel">취소</button>
       <button class="primary" id="memoSave">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receivable Registration Modal: select an existing calendar schedule -->
+<div class="modal-overlay" id="receivableRegisterOverlay">
+  <div class="modal receivable-register-modal">
+    <h3>미수금 업체 등록</h3>
+    <div class="modal-sub">월별 캘린더에서 미수금을 등록할 시험 일정을 선택하세요.</div>
+    <div class="mini-cal-nav">
+      <button type="button" class="ghost" id="receivableCalPrev">‹</button>
+      <strong id="receivableCalTitle"></strong>
+      <button type="button" class="ghost" id="receivableCalNext">›</button>
+    </div>
+    <div class="mini-cal-grid" id="receivableMiniCalendar"></div>
+    <div class="receivable-selected-schedule" id="receivableSelectedSchedule">위 달력에서 일정(업체명)을 선택해 주세요.</div>
+    <div class="receivable-register-fields" id="receivableRegisterFields" style="display:none">
+      <div class="form-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px">
+        <label>시험비 (원)<input id="newReceivableFee" type="number" min="0" step="1000" placeholder="0" style="width:100%;box-sizing:border-box"></label>
+        <label>미수금 (원)<input id="newReceivableBalance" type="number" min="0" step="1000" placeholder="0" style="width:100%;box-sizing:border-box"></label>
+        <label style="grid-column:1/-1">입금 예정일<input id="newReceivableDue" type="date" style="width:100%;box-sizing:border-box"></label>
+      </div>
+      <div class="receivable-note">선택한 기존 일정에 미수금 정보를 연결합니다. 같은 업체를 새로 중복 등록하지 않습니다.</div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="ghost" id="receivableRegisterCancel">취소</button>
+      <button type="button" class="primary" id="receivableRegisterSave" disabled>미수금 등록</button>
     </div>
   </div>
 </div>
@@ -1303,32 +1332,97 @@
     await saveToSheet();
   });
 
-  document.getElementById('addReceivableCompany').addEventListener('click', async ()=>{
+  let receivableRegisterMonth = { year: calView.year, month: calView.month };
+  let selectedReceivableScheduleId = null;
+  let selectedReceivableDate = null;
+
+  function openReceivableRegister(){
     if(!ensureEditor()) return;
-    const name=document.getElementById('newReceivableName').value.trim();
-    if(!name){ alert('업체명을 입력해주세요.'); document.getElementById('newReceivableName').focus(); return; }
-    if(state.companies.some(c=>String(c.name||'').trim().toLowerCase()===name.toLowerCase())){
-      if(!confirm('같은 이름의 업체가 이미 등록되어 있습니다. 미수금 관리용으로 업체를 추가 등록할까요?')) return;
-    }
-    const fee=Math.max(0,Number(document.getElementById('newReceivableFee').value||0));
-    const balance=Math.max(0,Number(document.getElementById('newReceivableBalance').value||0));
-    const due=document.getElementById('newReceivableDue').value||'';
-    const item={
-      id:uid(), name, testType:'V', testTypeCustom:'', region:'',
-      lastYearDate:'', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false,
-      examFee:fee, otherPaidAmount:0, receivableAmount:Math.min(balance,fee),
-      paymentStatus:fee>0 && balance===0 ? '100' : 'none', paymentDueDate:due, reportSent:false,
-      receivableMemo:'', memo:''
-    };
-    state.companies.push(item);
-    document.getElementById('newReceivableName').value='';
+    receivableRegisterMonth={year:calView.year,month:calView.month};
+    selectedReceivableScheduleId=null;
+    selectedReceivableDate=null;
     document.getElementById('newReceivableFee').value='';
     document.getElementById('newReceivableBalance').value='';
     document.getElementById('newReceivableDue').value='';
+    document.getElementById('receivableRegisterFields').style.display='none';
+    document.getElementById('receivableSelectedSchedule').textContent='위 달력에서 일정(업체명)을 선택해 주세요.';
+    document.getElementById('receivableRegisterSave').disabled=true;
+    renderReceivableMiniCalendar();
+    document.getElementById('receivableRegisterOverlay').classList.add('open');
+  }
+  function renderReceivableMiniCalendar(){
+    const {year,month}=receivableRegisterMonth;
+    document.getElementById('receivableCalTitle').textContent=`${year}년 ${month+1}월`;
+    const first=new Date(year,month,1), offset=first.getDay(), days=new Date(year,month+1,0).getDate();
+    const prevDays=new Date(year,month,0).getDate();
+    const cells=[];
+    for(let i=0;i<offset;i++) cells.push({day:prevDays-offset+i+1,outside:true});
+    for(let d=1;d<=days;d++) cells.push({day:d,outside:false,date:`${year}-${pad(month+1)}-${pad(d)}`});
+    while(cells.length%7) cells.push({day:cells.length-offset-days+1,outside:true});
+    let html=DOW.map(d=>`<div class="mini-cal-dow">${d}</div>`).join('');
+    html+=cells.map(cell=>{
+      if(cell.outside) return `<div class="mini-cal-day outside"><div class="mini-cal-num">${cell.day}</div></div>`;
+      const events=state.companies.filter(c=>c.plannedDate===cell.date);
+      const selectedDate=selectedReceivableDate===cell.date?' selected':'';
+      const eventHtml=events.map(item=>`<button type="button" class="mini-cal-event ${selectedReceivableScheduleId===item.id?'selected':''}" data-receivable-schedule-id="${escapeAttr(item.id)}" title="${escapeAttr(item.name||'업체명 없음')} · ${escapeAttr(item.plannedDate||'')}">${escapeHtml(item.name||'(이름 없음)')}</button>`).join('');
+      return `<div class="mini-cal-day${selectedDate}" data-mini-date="${cell.date}"><div class="mini-cal-num">${cell.day}</div>${eventHtml}</div>`;
+    }).join('');
+    document.getElementById('receivableMiniCalendar').innerHTML=html;
+  }
+  document.getElementById('addReceivableCompany').addEventListener('click',openReceivableRegister);
+  document.getElementById('receivableCalPrev').addEventListener('click',()=>{
+    receivableRegisterMonth.month--; if(receivableRegisterMonth.month<0){receivableRegisterMonth.month=11;receivableRegisterMonth.year--;}
+    renderReceivableMiniCalendar();
+  });
+  document.getElementById('receivableCalNext').addEventListener('click',()=>{
+    receivableRegisterMonth.month++; if(receivableRegisterMonth.month>11){receivableRegisterMonth.month=0;receivableRegisterMonth.year++;}
+    renderReceivableMiniCalendar();
+  });
+  document.getElementById('receivableMiniCalendar').addEventListener('click',e=>{
+    const eventBtn=e.target.closest('[data-receivable-schedule-id]');
+    if(eventBtn){
+      const item=state.companies.find(c=>c.id===eventBtn.dataset.receivableScheduleId);
+      if(!item) return;
+      selectedReceivableScheduleId=item.id; selectedReceivableDate=item.plannedDate||null;
+      document.getElementById('receivableSelectedSchedule').textContent=`선택한 일정: ${item.name||'(이름 없음)'} · ${item.plannedDate||'시험 예정일 미정'} · ${item.testTypeCustom||item.testType||''}`;
+      document.getElementById('receivableRegisterFields').style.display='block';
+      document.getElementById('newReceivableFee').value=getExamFee(item)||'';
+      document.getElementById('newReceivableBalance').value=getReceivableAmount(item)||'';
+      document.getElementById('newReceivableDue').value=item.paymentDueDate||'';
+      document.getElementById('receivableRegisterSave').disabled=false;
+      renderReceivableMiniCalendar();
+      return;
+    }
+    const day=e.target.closest('[data-mini-date]');
+    if(day){selectedReceivableDate=day.dataset.miniDate;renderReceivableMiniCalendar();}
+  });
+  document.getElementById('receivableRegisterCancel').addEventListener('click',()=>{
+    document.getElementById('receivableRegisterOverlay').classList.remove('open');
+  });
+  document.getElementById('receivableRegisterOverlay').addEventListener('click',e=>{
+    if(e.target.id==='receivableRegisterOverlay') e.currentTarget.classList.remove('open');
+  });
+  document.getElementById('receivableRegisterSave').addEventListener('click',async()=>{
+    if(!ensureEditor()) return;
+    const item=state.companies.find(c=>c.id===selectedReceivableScheduleId);
+    if(!item){alert('먼저 달력에서 등록할 시험 일정을 선택해주세요.');return;}
+    const fee=Math.max(0,Number(document.getElementById('newReceivableFee').value||0));
+    const balance=Math.min(fee,Math.max(0,Number(document.getElementById('newReceivableBalance').value||0)));
+    const paid=Math.max(0,fee-balance);
+    item.examFee=fee;
+    item.receivableAmount=balance;
+    item.otherPaidAmount=paid;
+    if(fee>0 && balance===0){item.paymentStatus='100';item.otherPaidAmount=0;}
+    else if(fee>0 && paid===fee*0.7){item.paymentStatus='70';item.otherPaidAmount=0;}
+    else if(fee>0 && paid===fee*0.5){item.paymentStatus='50';item.otherPaidAmount=0;}
+    else if(paid>0){item.paymentStatus='other';}
+    else {item.paymentStatus='none';item.otherPaidAmount=0;}
+    item.paymentDueDate=document.getElementById('newReceivableDue').value||'';
+    document.getElementById('receivableRegisterOverlay').classList.remove('open');
     receivableFilter='all';
     document.querySelectorAll('[data-receivable-filter]').forEach(b=>b.classList.toggle('active',b.dataset.receivableFilter==='all'));
     renderAll();
-    await saveToSheet('미수금 업체가 등록되었습니다');
+    await saveToSheet('선택한 시험 일정에 미수금 정보가 등록되었습니다');
   });
 
   document.getElementById('receivableSearch').addEventListener('input',e=>{
