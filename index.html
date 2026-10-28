@@ -173,6 +173,8 @@
   .receivable-empty{ text-align:center; color:var(--ink-soft); padding:30px 10px; }
   .receivable-note{ font-size:11px; color:var(--ink-soft); margin-top:8px; line-height:1.5; }
   .receivable-edit-input{ min-width:90px; box-sizing:border-box; }
+  .receivable-memo-input{width:100%;min-width:180px;min-height:48px;box-sizing:border-box;resize:vertical;font:inherit;font-size:12px;padding:6px;border:1px solid var(--line);border-radius:5px;background:#fff;}
+  .receivable-memo-input:disabled{background:#fafafa;color:inherit;opacity:1;}
   .receivable-edit-input:disabled,.receivable-edit:disabled{ opacity:1; background:#fafafa; color:inherit; }
   .report-sent-check{display:inline-flex;align-items:center;justify-content:center;gap:5px;cursor:pointer;font-size:11px;color:var(--ink-soft);white-space:nowrap;}
   .report-sent-check input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;margin:0;}
@@ -543,6 +545,22 @@
         </div>
       </div>
       <div class="receivable-page-summary" id="receivableSummary"></div>
+      <div class="receivable-register" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:14px 0;padding:12px;background:var(--panel-soft,#f7f8fa);border:1px solid var(--line);border-radius:10px">
+        <strong style="width:100%">미수금 업체 등록</strong>
+        <label style="flex:2;min-width:180px;font-size:12px">업체명
+          <input id="newReceivableName" type="text" placeholder="업체명 입력" style="width:100%;box-sizing:border-box">
+        </label>
+        <label style="flex:1;min-width:120px;font-size:12px">시험비 (원)
+          <input id="newReceivableFee" type="number" min="0" step="1000" placeholder="0" style="width:100%;box-sizing:border-box">
+        </label>
+        <label style="flex:1;min-width:120px;font-size:12px">미수금 (원)
+          <input id="newReceivableBalance" type="number" min="0" step="1000" placeholder="0" style="width:100%;box-sizing:border-box">
+        </label>
+        <label style="flex:1;min-width:145px;font-size:12px">입금 예정일
+          <input id="newReceivableDue" type="date" style="width:100%;box-sizing:border-box">
+        </label>
+        <button type="button" class="primary" id="addReceivableCompany">＋ 업체 등록</button>
+      </div>
       <div class="receivable-filterbar">
         <input id="receivableSearch" type="text" placeholder="업체명으로 검색" autocomplete="off">
         <button type="button" class="receivable-filter active" data-receivable-filter="all">전체</button>
@@ -565,7 +583,8 @@
               <th style="width:15%;text-align:center">입금 진행률</th>
               <th style="width:10%">입금 예정일</th>
               <th style="width:12%;text-align:center">보고서 발송</th>
-              <th style="width:17%">상태</th>
+              <th style="width:13%">상태</th>
+              <th style="width:22%">업체별 메모</th>
             </tr>
           </thead>
           <tbody id="receivableBody"></tbody>
@@ -622,29 +641,6 @@
         <label>지역
           <input type="text" id="entryRegion" placeholder="지역">
         </label>
-      </div>
-      <div class="entry-row">
-        <label>시험비 (원)
-          <input type="number" id="entryExamFee" min="0" step="1000" placeholder="0">
-        </label>
-        <label>입금 예정일
-          <input type="date" id="entryPaymentDueDate">
-        </label>
-      </div>
-      <div>
-        <div style="font-size:12px;color:var(--ink-soft);font-weight:500;margin-bottom:6px">입금 진행률</div>
-        <div class="payment-checks" id="entryPaymentChecks" style="justify-content:flex-start">
-          <label class="payment-check"><input type="checkbox" data-entry-payment="50"> 50%</label>
-          <label class="payment-check"><input type="checkbox" data-entry-payment="70"> 70%</label>
-          <label class="payment-check"><input type="checkbox" data-entry-payment="100"> 100%</label>
-          <label class="payment-check"><input type="checkbox" data-entry-payment="other"> 기타</label>
-        </div>
-        <div class="other-paid-wrap" id="entryOtherPaidWrap">
-          <label>기타 입금액 (원)
-            <input type="number" id="entryOtherPaidAmount" min="0" step="1000" placeholder="실제 입금된 금액">
-          </label>
-        </div>
-        <div class="entry-finance-hint">50% / 70% / 100% 선택 시 시험비를 기준으로 입금액과 미수금이 자동 계산됩니다.</div>
       </div>
       <label>메모
         <textarea id="entryMemo" style="min-height:70px" placeholder="특이사항, 연락 이력 등"></textarea>
@@ -752,9 +748,9 @@
     targetYear: new Date().getFullYear(),
     holidays: Object.assign({}, HOLIDAYS_SEED),
     companies: [
-      { id: uid(), name:'대한계측', testType:'V', testTypeCustom:'', region:'경기 안산', lastYearDate: (new Date().getFullYear()-1)+'-03-14', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', reportSent:false, memo:'매년 3월 둘째 주 선호. 담당자: 김OO 과장' },
-      { id: uid(), name:'한빛시험소', testType:'RV', testTypeCustom:'', region:'충남 아산', lastYearDate: (new Date().getFullYear()-1)+'-05-22', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', reportSent:false, memo:'' },
-      { id: uid(), name:'삼성정밀', testType:'M', testTypeCustom:'', region:'부산', lastYearDate: (new Date().getFullYear()-1)+'-09-05', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', reportSent:false, memo:'현장 접근 어려움 - 전날 사전 연락 필수' },
+      { id: uid(), name:'대한계측', testType:'V', testTypeCustom:'', region:'경기 안산', lastYearDate: (new Date().getFullYear()-1)+'-03-14', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, reportSent:false, memo:'매년 3월 둘째 주 선호. 담당자: 김OO 과장' },
+      { id: uid(), name:'한빛시험소', testType:'RV', testTypeCustom:'', region:'충남 아산', lastYearDate: (new Date().getFullYear()-1)+'-05-22', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, reportSent:false, memo:'' },
+      { id: uid(), name:'삼성정밀', testType:'M', testTypeCustom:'', region:'부산', lastYearDate: (new Date().getFullYear()-1)+'-09-05', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, reportSent:false, memo:'현장 접근 어려움 - 전날 사전 연락 필수' },
     ]
   };
 
@@ -846,7 +842,7 @@
         confirmed:!!c.confirmed, quoteSent:!!c.quote_sent, quoteReplied:!!c.quote_replied,
         examFee:Number(c.exam_fee||0), otherPaidAmount:Number(c.other_paid_amount||0),
         receivableAmount:Number(c.receivable_amount||0), paymentStatus:String(c.payment_status||'none'),
-        paymentDueDate:String(c.payment_due_date||''), reportSent:!!c.report_sent, memo:String(c.memo||'')
+        paymentDueDate:String(c.payment_due_date||''), reportSent:!!c.report_sent, receivableMemo:String(c.receivable_memo||''), memo:String(c.memo||'')
       }));
       state.holidays = {};
       (holidays||[]).forEach(h=>{ state.holidays[String(h.date)] = String(h.name||'공휴일'); });
@@ -872,7 +868,7 @@
         confirmed:!!c.confirmed, quote_sent:!!c.quoteSent, quote_replied:!!c.quoteReplied,
         exam_fee:getExamFee(c), other_paid_amount:getOtherPaidAmount(c),
         receivable_amount:getReceivableAmount(c), payment_status:String(c.paymentStatus||'none'),
-        payment_due_date:c.paymentDueDate||null, report_sent:!!c.reportSent, memo:String(c.memo||'')
+        payment_due_date:c.paymentDueDate||null, report_sent:!!c.reportSent, receivable_memo:String(c.receivableMemo||''), memo:String(c.memo||'')
       }));
       const {data:{user}}=await supabase.auth.getUser();
       if(!user) throw new Error('관리자 로그인이 필요합니다.');
@@ -1141,7 +1137,7 @@
     if(!body) return;
     const rows=getReceivableCompanies();
     if(!rows.length){
-      body.innerHTML='<tr><td colspan="10" class="receivable-empty">조건에 맞는 업체가 없습니다.</td></tr>';
+      body.innerHTML='<tr><td colspan="11" class="receivable-empty">조건에 맞는 업체가 없습니다.</td></tr>'; 
       return;
     }
     body.innerHTML=rows.map(item=>{
@@ -1152,7 +1148,7 @@
       const statusSelect = `<select class="field receivable-edit" data-receivable-field="paymentStatus" ${canEdit?'':'disabled'}>
         ${statusOptions.map(v=>`<option value="${v}" ${status===v?'selected':''}>${statusLabels[v]}</option>`).join('')}
       </select>`;
-      const feeInput = `${formatWon(getExamFee(item))}`;
+      const feeInput = `<input class="money-input receivable-edit-input" type="number" min="0" step="1000" value="${getExamFee(item)||''}" data-receivable-field="examFee" placeholder="시험비" ${canEdit?'':'disabled'}>`;
       const dueInput = `<input class="payment-due-input receivable-edit-input" type="date" value="${escapeAttr(item.paymentDueDate||'')}" data-receivable-field="paymentDueDate" ${canEdit?'':'disabled'}>`;
       const otherInput = status==='other'
         ? `<input class="money-input receivable-edit-input" style="margin-top:5px;width:100%;box-sizing:border-box" type="number" min="0" step="1000" value="${getOtherPaidAmount(item)||''}" data-receivable-field="otherPaidAmount" placeholder="기타 입금액" ${canEdit?'':'disabled'}>`
@@ -1166,14 +1162,42 @@
                  value="${getPaidAmount(item)||''}" data-field="receivablePaid"
                  placeholder="0" ${canEdit?'':'disabled'}>
         </td>
-        <td class="receivable-amount ${getReceivableAmount(item)>0?'receivable-overdue':''}">${formatWon(getReceivableAmount(item))}</td>
+        <td class="receivable-amount ${getReceivableAmount(item)>0?'receivable-overdue':''}"><input class="money-input receivable-edit-input" type="number" min="0" step="1000" value="${getReceivableAmount(item)||''}" data-receivable-field="receivableAmount" placeholder="미수금" ${canEdit?'':'disabled'}></td>
         <td style="text-align:center">${escapeHtml(paymentStatusText(status))}</td>
         <td>${dueInput}</td>
         <td style="text-align:center"><label class="report-sent-check"><input type="checkbox" data-field="reportSent" ${item.reportSent?'checked':''} ${canEdit?'':'disabled'}><span>${item.reportSent?'발송완료':'미발송'}</span></label></td>
         <td class="receivable-status-cell ${overdue?'receivable-overdue':''}">${receivableStatusText(item)}</td>
+        <td><textarea class="receivable-memo-input" data-field="receivableMemo" rows="2" placeholder="업체별 입금 관련 메모" ${canEdit?'':'disabled'}>${escapeHtml(item.receivableMemo||'')}</textarea></td>
       </tr>`;
     }).join('');
   }
+
+  document.getElementById('receivableBody').addEventListener('change', async e=>{
+    if(!canEdit) return;
+    const field = e.target.dataset.receivableField;
+    if(!['examFee','receivableAmount','paymentDueDate'].includes(field)) return;
+    const tr=e.target.closest('tr[data-id]');
+    if(!tr) return;
+    const item=state.companies.find(c=>c.id===tr.dataset.id);
+    if(!item) return;
+    if(field==='examFee'){
+      item.examFee=Math.max(0,Number(e.target.value||0));
+      item.receivableAmount=Math.min(Math.max(0,Number(item.receivableAmount||0)),item.examFee);
+      // 시험비/미수금을 직접 관리할 때는 자동 진행률 대신 미수금 기준으로 입금액을 계산합니다.
+      item.paymentStatus=item.examFee>0 && item.receivableAmount===0 ? '100' : 'none';
+      item.otherPaidAmount=0;
+    } else if(field==='receivableAmount'){
+      const balance=Math.min(Math.max(0,Number(e.target.value||0)),getExamFee(item));
+      item.receivableAmount=balance;
+      item.paymentStatus=getExamFee(item)>0 && balance===0 ? '100' : 'none';
+      item.otherPaidAmount=0;
+    } else {
+      item.paymentDueDate=e.target.value||'';
+    }
+    renderReceivableSummary();
+    renderReceivablePage();
+    await saveToSheet(field==='paymentDueDate'?'입금 예정일이 저장되었습니다':'시험비/미수금이 저장되었습니다');
+  });
 
   document.getElementById('receivableBody').addEventListener('change', async e=>{
     if(!canEdit) return;
@@ -1211,6 +1235,16 @@
   });
 
   document.getElementById('receivableBody').addEventListener('change', async e=>{
+    if(!canEdit || e.target.dataset.field !== 'receivableMemo') return;
+    const tr=e.target.closest('tr[data-id]');
+    if(!tr) return;
+    const item=state.companies.find(c=>c.id===tr.dataset.id);
+    if(!item) return;
+    item.receivableMemo=String(e.target.value||'');
+    await saveToSheet('업체별 메모가 저장되었습니다');
+  });
+
+  document.getElementById('receivableBody').addEventListener('change', async e=>{
     if(!canEdit || e.target.dataset.field !== 'reportSent') return;
     const tr=e.target.closest('tr[data-id]');
     if(!tr) return;
@@ -1219,6 +1253,34 @@
     item.reportSent=!!e.target.checked;
     renderReceivablePage();
     await saveToSheet();
+  });
+
+  document.getElementById('addReceivableCompany').addEventListener('click', async ()=>{
+    if(!ensureEditor()) return;
+    const name=document.getElementById('newReceivableName').value.trim();
+    if(!name){ alert('업체명을 입력해주세요.'); document.getElementById('newReceivableName').focus(); return; }
+    if(state.companies.some(c=>String(c.name||'').trim().toLowerCase()===name.toLowerCase())){
+      if(!confirm('같은 이름의 업체가 이미 등록되어 있습니다. 미수금 관리용으로 업체를 추가 등록할까요?')) return;
+    }
+    const fee=Math.max(0,Number(document.getElementById('newReceivableFee').value||0));
+    const balance=Math.max(0,Number(document.getElementById('newReceivableBalance').value||0));
+    const due=document.getElementById('newReceivableDue').value||'';
+    const item={
+      id:uid(), name, testType:'V', testTypeCustom:'', region:'',
+      lastYearDate:'', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false,
+      examFee:fee, otherPaidAmount:0, receivableAmount:Math.min(balance,fee),
+      paymentStatus:fee>0 && balance===0 ? '100' : 'none', paymentDueDate:due, reportSent:false,
+      receivableMemo:'', memo:''
+    };
+    state.companies.push(item);
+    document.getElementById('newReceivableName').value='';
+    document.getElementById('newReceivableFee').value='';
+    document.getElementById('newReceivableBalance').value='';
+    document.getElementById('newReceivableDue').value='';
+    receivableFilter='all';
+    document.querySelectorAll('[data-receivable-filter]').forEach(b=>b.classList.toggle('active',b.dataset.receivableFilter==='all'));
+    renderAll();
+    await saveToSheet('미수금 업체가 등록되었습니다');
   });
 
   document.getElementById('receivableSearch').addEventListener('input',e=>{
@@ -1347,7 +1409,7 @@
   // ---------- Toolbar actions ----------
   document.getElementById('btnAdd').addEventListener('click', ()=>{
     if(!ensureEditor()) return;
-    state.companies.push({ id:uid(), name:'', testType:'V', testTypeCustom:'', region:'', lastYearDate:'', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', reportSent:false, memo:'' });
+    state.companies.push({ id:uid(), name:'', testType:'V', testTypeCustom:'', region:'', lastYearDate:'', plannedDate:'', confirmed:false, quoteSent:false, quoteReplied:false, reportSent:false, memo:'' });
     renderAll();
     saveToSheet();
     const rows = tableBody.querySelectorAll('tr[data-id] input[data-field="name"]');
@@ -1590,7 +1652,7 @@
       entryState.id = id;
       entryState.dateStr = item.plannedDate;
     } else {
-      item = { name:'', testType:'V', testTypeCustom:'', region:'', memo:'', confirmed:false, quoteSent:false, quoteReplied:false, examFee:0, otherPaidAmount:0, receivableAmount:0, paymentStatus:'none', paymentDueDate:'', reportSent:false };
+      item = { name:'', testType:'V', testTypeCustom:'', region:'', memo:'', confirmed:false, quoteSent:false, quoteReplied:false, reportSent:false };
       entryState.id = null;
       entryState.dateStr = dateStr;
     }
@@ -1602,14 +1664,6 @@
     document.getElementById('entryTestCustom').value = item.testTypeCustom || '';
     entryTestCustomWrap.style.display = item.testType === '기타' ? 'flex' : 'none';
     document.getElementById('entryRegion').value = item.region || '';
-    document.getElementById('entryExamFee').value = getExamFee(item);
-    document.getElementById('entryOtherPaidAmount').value = getOtherPaidAmount(item);
-    document.getElementById('entryPaymentDueDate').value = item.paymentDueDate || '';
-    document.querySelectorAll('#entryPaymentChecks input[data-entry-payment]').forEach(cb=>{
-      cb.checked = (item.paymentStatus || 'none') === cb.dataset.entryPayment;
-      cb.closest('.payment-check')?.classList.toggle('selected', cb.checked);
-    });
-    toggleEntryOtherPaid();
     document.getElementById('entryMemo').value = item.memo || '';
     document.getElementById('entryConfirmed').checked = !!item.confirmed;
     document.getElementById('entryQuoteSent').checked = !!item.quoteSent;
@@ -1644,22 +1698,6 @@
     entryTestCustomWrap.style.display = entryTestType.value === '기타' ? 'flex' : 'none';
   });
 
-  function toggleEntryOtherPaid(){
-    const checked=document.querySelector('#entryPaymentChecks input[data-entry-payment]:checked');
-    const isOther=checked?.dataset.entryPayment==='other';
-    const wrap=document.getElementById('entryOtherPaidWrap');
-    if(wrap) wrap.classList.toggle('show', !!isOther);
-  }
-  document.querySelectorAll('#entryPaymentChecks input[data-entry-payment]').forEach(cb=>{
-    cb.addEventListener('change', ()=>{
-      document.querySelectorAll('#entryPaymentChecks input[data-entry-payment]').forEach(other=>{
-        if(other !== cb) other.checked = false;
-        other.closest('.payment-check')?.classList.toggle('selected', other.checked);
-      });
-      toggleEntryOtherPaid();
-    });
-  });
-
   document.getElementById('entryQuoteSent').addEventListener('change', (e)=>{
     const entryQuoteReplied = document.getElementById('entryQuoteReplied');
     entryQuoteReplied.disabled = !e.target.checked;
@@ -1678,17 +1716,12 @@
       testType: entryTestType.value,
       testTypeCustom: document.getElementById('entryTestCustom').value.trim(),
       region: document.getElementById('entryRegion').value.trim(),
-      examFee: Math.max(0, Number(document.getElementById('entryExamFee').value||0)),
-      otherPaidAmount: Math.max(0, Number(document.getElementById('entryOtherPaidAmount').value||0)),
-      paymentDueDate: document.getElementById('entryPaymentDueDate').value || '',
-      paymentStatus: document.querySelector('#entryPaymentChecks input[data-entry-payment]:checked')?.dataset.entryPayment || 'none',
       memo: document.getElementById('entryMemo').value,
       confirmed: document.getElementById('entryConfirmed').checked,
       quoteSent: document.getElementById('entryQuoteSent').checked,
       quoteReplied: document.getElementById('entryQuoteSent').checked && document.getElementById('entryQuoteReplied').checked,
       plannedDate: entryState.dateStr || ''
     };
-    payload.receivableAmount = getReceivableAmount(payload);
     if(entryState.mode === 'edit'){
       const item = state.companies.find(c=>c.id===entryState.id);
       Object.assign(item, payload);
