@@ -575,8 +575,8 @@
         <table id="receivableTable">
           <thead>
             <tr>
-              <th style="width:18%">업체명</th>
-              <th style="width:11%">시험 예정일</th>
+              <th style="width:22%">업체명</th>
+              <th style="width:12%">시험 예정일</th>
               <th style="width:13%;text-align:right">시험비</th>
               <th style="width:13%;text-align:right">입금액</th>
               <th style="width:13%;text-align:right">미수금</th>
@@ -584,7 +584,7 @@
               <th style="width:10%">입금 예정일</th>
               <th style="width:12%;text-align:center">보고서 발송</th>
               <th style="width:13%">상태</th>
-              <th style="width:22%">업체별 메모</th>
+              <th style="width:8%;text-align:center">수정</th>
             </tr>
           </thead>
           <tbody id="receivableBody"></tbody>
@@ -612,6 +612,25 @@
     <div class="modal-footer">
       <button class="ghost" id="memoCancel">취소</button>
       <button class="primary" id="memoSave">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receivable Edit Modal -->
+<div class="modal-overlay" id="receivableEditOverlay">
+  <div class="modal">
+    <h3 id="receivableEditTitle">미수금 정보 수정</h3>
+    <div class="modal-sub" id="receivableEditSub"></div>
+    <div class="form-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+      <label>시험비 (원)<input id="editReceivableFee" type="number" min="0" step="1000" style="width:100%;box-sizing:border-box"></label>
+      <label>입금액 (원)<input id="editReceivablePaid" type="number" min="0" step="1000" style="width:100%;box-sizing:border-box"></label>
+      <label>미수금 (원)<input id="editReceivableBalance" type="number" min="0" step="1000" style="width:100%;box-sizing:border-box"></label>
+      <label>입금 예정일<input id="editReceivableDue" type="date" style="width:100%;box-sizing:border-box"></label>
+    </div>
+    <label style="display:block;margin-top:12px">업체별 메모<textarea id="editReceivableMemo" rows="3" style="width:100%;box-sizing:border-box" placeholder="입금 관련 메모"></textarea></label>
+    <div class="modal-footer">
+      <button class="ghost" id="receivableEditCancel">취소</button>
+      <button class="primary" id="receivableEditSave">저장</button>
     </div>
   </div>
 </div>
@@ -1137,40 +1156,69 @@
     if(!body) return;
     const rows=getReceivableCompanies();
     if(!rows.length){
-      body.innerHTML='<tr><td colspan="11" class="receivable-empty">조건에 맞는 업체가 없습니다.</td></tr>'; 
+      body.innerHTML='<tr><td colspan="11" class="receivable-empty">조건에 맞는 업체가 없습니다.</td></tr>';
       return;
     }
     body.innerHTML=rows.map(item=>{
       const overdue=isOverdue(item);
       const status=item.paymentStatus||'none';
-      const statusOptions = ['50','70','100','other','none'];
-      const statusLabels = {'50':'50%','70':'70%','100':'100%','other':'기타','none':'미입력'};
-      const statusSelect = `<select class="field receivable-edit" data-receivable-field="paymentStatus" ${canEdit?'':'disabled'}>
-        ${statusOptions.map(v=>`<option value="${v}" ${status===v?'selected':''}>${statusLabels[v]}</option>`).join('')}
-      </select>`;
-      const feeInput = `<input class="money-input receivable-edit-input" type="number" min="0" step="1000" value="${getExamFee(item)||''}" data-receivable-field="examFee" placeholder="시험비" ${canEdit?'':'disabled'}>`;
-      const dueInput = `<input class="payment-due-input receivable-edit-input" type="date" value="${escapeAttr(item.paymentDueDate||'')}" data-receivable-field="paymentDueDate" ${canEdit?'':'disabled'}>`;
-      const otherInput = status==='other'
-        ? `<input class="money-input receivable-edit-input" style="margin-top:5px;width:100%;box-sizing:border-box" type="number" min="0" step="1000" value="${getOtherPaidAmount(item)||''}" data-receivable-field="otherPaidAmount" placeholder="기타 입금액" ${canEdit?'':'disabled'}>`
-        : '';
-      return `<tr data-id="${item.id}">
-        <td>${escapeHtml(item.name||'(이름 없음)')}</td>
-        <td>${escapeHtml(item.plannedDate||'-')}</td>
-        <td class="receivable-amount">${feeInput}</td>
-        <td class="receivable-amount">
-          <input class="money-input receivable-paid-input" type="number" min="0" step="1000"
-                 value="${getPaidAmount(item)||''}" data-field="receivablePaid"
-                 placeholder="0" ${canEdit?'':'disabled'}>
-        </td>
-        <td class="receivable-amount ${getReceivableAmount(item)>0?'receivable-overdue':''}"><input class="money-input receivable-edit-input" type="number" min="0" step="1000" value="${getReceivableAmount(item)||''}" data-receivable-field="receivableAmount" placeholder="미수금" ${canEdit?'':'disabled'}></td>
+      return `<tr data-id="${escapeAttr(item.id)}">
+        <td class="receivable-company-name">${escapeHtml(item.name||'(이름 없음)')}</td>
+        <td class="receivable-test-date">${escapeHtml(item.plannedDate||'미정')}</td>
+        <td class="receivable-amount">${formatWon(getExamFee(item))}</td>
+        <td class="receivable-amount">${formatWon(getPaidAmount(item))}</td>
+        <td class="receivable-amount ${getReceivableAmount(item)>0?'receivable-overdue':''}">${formatWon(getReceivableAmount(item))}</td>
         <td style="text-align:center">${escapeHtml(paymentStatusText(status))}</td>
-        <td>${dueInput}</td>
+        <td>${escapeHtml(item.paymentDueDate||'-')}</td>
         <td style="text-align:center"><label class="report-sent-check"><input type="checkbox" data-field="reportSent" ${item.reportSent?'checked':''} ${canEdit?'':'disabled'}><span>${item.reportSent?'발송완료':'미발송'}</span></label></td>
         <td class="receivable-status-cell ${overdue?'receivable-overdue':''}">${receivableStatusText(item)}</td>
-        <td><textarea class="receivable-memo-input" data-field="receivableMemo" rows="2" placeholder="업체별 입금 관련 메모" ${canEdit?'':'disabled'}>${escapeHtml(item.receivableMemo||'')}</textarea></td>
+        <td class="receivable-row-actions"><button type="button" class="icon-btn" data-action="edit-receivable" title="미수금 정보 수정" ${canEdit?'':'disabled'}>✏️</button></td>
       </tr>`;
     }).join('');
   }
+
+  let editingReceivableId = null;
+  document.getElementById('receivableBody').addEventListener('click', e=>{
+    const btn=e.target.closest('[data-action="edit-receivable"]');
+    if(!btn || !canEdit) return;
+    const tr=btn.closest('tr[data-id]');
+    const item=state.companies.find(c=>c.id===tr?.dataset.id);
+    if(!item) return;
+    editingReceivableId=item.id;
+    document.getElementById('receivableEditTitle').textContent='미수금 정보 수정';
+    document.getElementById('receivableEditSub').textContent=item.name||'';
+    document.getElementById('editReceivableFee').value=getExamFee(item)||'';
+    document.getElementById('editReceivablePaid').value=getPaidAmount(item)||'';
+    document.getElementById('editReceivableBalance').value=getReceivableAmount(item)||'';
+    document.getElementById('editReceivableDue').value=item.paymentDueDate||'';
+    document.getElementById('editReceivableMemo').value=item.receivableMemo||'';
+    document.getElementById('receivableEditOverlay').classList.add('open');
+  });
+  document.getElementById('receivableEditCancel').addEventListener('click',()=>{
+    document.getElementById('receivableEditOverlay').classList.remove('open'); editingReceivableId=null;
+  });
+  document.getElementById('receivableEditOverlay').addEventListener('click',e=>{
+    if(e.target.id==='receivableEditOverlay'){ e.currentTarget.classList.remove('open'); editingReceivableId=null; }
+  });
+  document.getElementById('receivableEditSave').addEventListener('click',async()=>{
+    if(!canEdit || !editingReceivableId) return;
+    const item=state.companies.find(c=>c.id===editingReceivableId);
+    if(!item) return;
+    const fee=Math.max(0,Number(document.getElementById('editReceivableFee').value||0));
+    const paid=Math.max(0,Number(document.getElementById('editReceivablePaid').value||0));
+    item.examFee=fee;
+    item.otherPaidAmount=paid;
+    item.receivableAmount=Math.max(0,fee-paid);
+    if(fee>0 && paid>=fee){ item.paymentStatus='100'; item.otherPaidAmount=0; }
+    else if(fee>0 && paid===fee*0.7){ item.paymentStatus='70'; item.otherPaidAmount=0; }
+    else if(fee>0 && paid===fee*0.5){ item.paymentStatus='50'; item.otherPaidAmount=0; }
+    else { item.paymentStatus='other'; }
+    item.paymentDueDate=document.getElementById('editReceivableDue').value||'';
+    item.receivableMemo=String(document.getElementById('editReceivableMemo').value||'');
+    document.getElementById('receivableEditOverlay').classList.remove('open'); editingReceivableId=null;
+    renderReceivableSummary(); renderReceivablePage();
+    await saveToSheet('미수금 정보가 저장되었습니다');
+  });
 
   document.getElementById('receivableBody').addEventListener('change', async e=>{
     if(!canEdit) return;
